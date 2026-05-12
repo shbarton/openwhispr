@@ -1550,7 +1550,9 @@
         "openai_whisper_1": "Modelo Whisper original",
         "groq_whisper_large_v3_turbo": "Velocidade 216x em tempo real",
         "groq_whisper_large_v3": "Modelo Large v3, rápido e preciso",
-        "mistral_voxtral_mini_latest": "Transcrição multilíngue rápida"
+        "mistral_voxtral_mini_latest": "Transcrição multilíngue rápida",
+        "deepgram_nova_3": "Latest Deepgram model, low latency streaming",
+        "deepgram_nova_2": "Broader language coverage"
       },
       "cloud": {
         "openai_gpt_5_2": "Modelo forte de raciocínio",

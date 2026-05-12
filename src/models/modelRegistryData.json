@@ -191,6 +191,27 @@
           "descriptionKey": "models.descriptions.transcription.mistral_voxtral_mini_latest"
         }
       ]
+    },
+    {
+      "id": "deepgram",
+      "name": "Deepgram",
+      "baseUrl": "https://api.deepgram.com/v1",
+      "models": [
+        {
+          "id": "nova-3",
+          "name": "Nova-3",
+          "description": "Latest Deepgram model, low latency streaming",
+          "descriptionKey": "models.descriptions.transcription.deepgram_nova_3",
+          "streaming": true
+        },
+        {
+          "id": "nova-2",
+          "name": "Nova-2",
+          "description": "Broader language coverage",
+          "descriptionKey": "models.descriptions.transcription.deepgram_nova_2",
+          "streaming": true
+        }
+      ]
     }
   ],
   "cloudProviders": [

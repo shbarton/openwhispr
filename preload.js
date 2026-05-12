@@ -358,6 +358,10 @@ contextBridge.exposeInMainWorld("electronAPI", {
   saveMistralKey: (key) => ipcRenderer.invoke("save-mistral-key", key),
   proxyMistralTranscription: (data) => ipcRenderer.invoke("proxy-mistral-transcription", data),
 
+  // Deepgram BYOK API
+  getDeepgramKey: () => ipcRenderer.invoke("get-deepgram-key"),
+  saveDeepgramKey: (key) => ipcRenderer.invoke("save-deepgram-key", key),
+
   // Custom endpoint API keys
   getCustomTranscriptionKey: () => ipcRenderer.invoke("get-custom-transcription-key"),
   saveCustomTranscriptionKey: (key) => ipcRenderer.invoke("save-custom-transcription-key", key),

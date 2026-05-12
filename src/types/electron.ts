@@ -860,6 +860,10 @@ declare global {
         contextBias?: string[];
       }) => Promise<{ text: string }>;
 
+      // Deepgram BYOK API key management
+      getDeepgramKey: () => Promise<string | null>;
+      saveDeepgramKey: (key: string) => Promise<void>;
+
       // Custom endpoint API keys
       getCustomTranscriptionKey?: () => Promise<string | null>;
       saveCustomTranscriptionKey?: (key: string) => Promise<void>;

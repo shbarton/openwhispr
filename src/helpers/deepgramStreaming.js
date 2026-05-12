@@ -97,6 +97,9 @@ class DeepgramStreaming {
     this.coldStartBuffer = [];
     this.coldStartBufferSize = 0;
     this.tokenRefreshFn = null;
+    // Auth header scheme. "Bearer" for OpenWhispr Cloud ephemeral tokens (default,
+    // unchanged behavior). "Token" for long-lived Deepgram BYOK API keys.
+    this.authHeaderPrefix = "Bearer";
     this.proactiveRefreshTimer = null;
     this._generation = 0;
     this.audioBytesSent = 0;
@@ -114,6 +117,11 @@ class DeepgramStreaming {
 
   setTokenRefreshFn(fn) {
     this.tokenRefreshFn = fn;
+  }
+
+  setAuthHeaderPrefix(prefix) {
+    // "Bearer" for ephemeral Cloud tokens, "Token" for long-lived BYOK keys.
+    this.authHeaderPrefix = prefix === "Token" ? "Token" : "Bearer";
   }
 
   buildWebSocketUrl(options) {
@@ -262,7 +270,7 @@ class DeepgramStreaming {
       }, WEBSOCKET_TIMEOUT_MS);
 
       this.warmConnection = new WebSocket(url, {
-        headers: { Authorization: `Bearer ${token}` },
+        headers: { Authorization: `${this.authHeaderPrefix} ${token}` },
       });
 
       this.warmConnection.on("open", () => {
@@ -596,7 +604,7 @@ class DeepgramStreaming {
       }, WEBSOCKET_TIMEOUT_MS);
 
       this.ws = new WebSocket(url, {
-        headers: { Authorization: `Bearer ${token}` },
+        headers: { Authorization: `${this.authHeaderPrefix} ${token}` },
       });
 
       this.ws.on("open", () => {

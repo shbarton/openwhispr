@@ -1578,7 +1578,9 @@
         "openai_whisper_1": "オリジナル Whisper モデル",
         "groq_whisper_large_v3_turbo": "リアルタイムの 216 倍速",
         "groq_whisper_large_v3": "Large v3 モデル、高速かつ高精度",
-        "mistral_voxtral_mini_latest": "高速多言語文字起こし"
+        "mistral_voxtral_mini_latest": "高速多言語文字起こし",
+        "deepgram_nova_3": "Latest Deepgram model, low latency streaming",
+        "deepgram_nova_2": "Broader language coverage"
       },
       "cloud": {
         "openai_gpt_5_2": "強力な推論モデル",

@@ -225,8 +225,20 @@ registerProcessor("pcm-streaming-processor", PCMStreamingProcessor);
     this.sttConfig = config;
   }
 
+  isDeepgramBYOK() {
+    const s = getSettings();
+    return (
+      s.cloudTranscriptionMode === "byok" &&
+      (s.cloudTranscriptionProvider || "openai") === "deepgram" &&
+      !!s.deepgramApiKey
+    );
+  }
+
   getStreamingProvider() {
     const { cloudTranscriptionModel } = getSettings();
+    if (this.isDeepgramBYOK()) {
+      return STREAMING_PROVIDERS.deepgram;
+    }
     if (REALTIME_MODELS.has(cloudTranscriptionModel)) {
       return STREAMING_PROVIDERS["openai-realtime"];
     }
@@ -236,6 +248,7 @@ registerProcessor("pcm-streaming-processor", PCMStreamingProcessor);
   }
 
   getStreamingProviderName() {
+    if (this.isDeepgramBYOK()) return "deepgram";
     const defaultProvider = this.context === "notes" ? "deepgram" : "openai-realtime";
     return this.sttConfig?.streamingProvider || defaultProvider;
   }
@@ -2018,6 +2031,15 @@ registerProcessor("pcm-streaming-processor", PCMStreamingProcessor);
       return false;
     }
 
+    // Deepgram BYOK streaming: user has Deepgram selected as the cloud provider
+    // and has pasted their own API key. Bypasses OpenWhispr Cloud entirely.
+    if (
+      s.cloudTranscriptionMode === "byok" &&
+      (s.cloudTranscriptionProvider || "openai") === "deepgram"
+    ) {
+      return !!s.deepgramApiKey;
+    }
+
     if (s.cloudTranscriptionMode !== "openwhispr" || !(isSignedInOverride ?? s.isSignedIn)) {
       return false;
     }
@@ -2050,6 +2072,7 @@ registerProcessor("pcm-streaming-processor", PCMStreamingProcessor);
             keyterms: this.getKeyterms(),
             model: cloudTranscriptionModel,
             mode: cloudTranscriptionMode === "byok" ? "byok" : "openwhispr",
+            byok: this.isDeepgramBYOK(),
           });
           // Throw error to trigger retry if AUTH_EXPIRED
           if (!res.success && res.code) {
@@ -2272,6 +2295,7 @@ registerProcessor("pcm-streaming-processor", PCMStreamingProcessor);
           keyterms: this.getKeyterms(),
           model: cloudTranscriptionModel,
           mode: cloudTranscriptionMode === "byok" ? "byok" : "openwhispr",
+          byok: this.isDeepgramBYOK(),
         });
 
         if (!res.success) {

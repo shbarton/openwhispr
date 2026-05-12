@@ -196,16 +196,20 @@ interface TranscriptionModelPickerProps {
   variant?: "onboarding" | "settings";
   mode?: "cloud" | "local";
   streamingOnly?: boolean;
+  excludedCloudProviders?: ReadonlyArray<CloudProviderId>;
 }
 
 const CLOUD_PROVIDER_TABS = [
   { id: "openai", name: "OpenAI" },
   { id: "groq", name: "Groq" },
   { id: "mistral", name: "Mistral" },
+  { id: "deepgram", name: "Deepgram" },
   { id: "custom", name: "Custom" },
-];
+] as const;
 
-const VALID_CLOUD_PROVIDER_IDS = CLOUD_PROVIDER_TABS.map((p) => p.id);
+type CloudProviderId = (typeof CLOUD_PROVIDER_TABS)[number]["id"];
+
+const VALID_CLOUD_PROVIDER_IDS: readonly string[] = CLOUD_PROVIDER_TABS.map((p) => p.id);
 
 const LOCAL_PROVIDER_TABS: Array<{ id: string; name: string; disabled?: boolean }> = [
   { id: "whisper", name: "OpenAI" },
@@ -265,6 +269,7 @@ export default function TranscriptionModelPicker({
   variant = "settings",
   mode,
   streamingOnly = false,
+  excludedCloudProviders,
 }: TranscriptionModelPickerProps) {
   const { t } = useTranslation();
   const openaiApiKey = useSettingsStore((s) => s.openaiApiKey);
@@ -273,6 +278,8 @@ export default function TranscriptionModelPicker({
   const setGroqApiKey = useSettingsStore((s) => s.setGroqApiKey);
   const mistralApiKey = useSettingsStore((s) => s.mistralApiKey);
   const setMistralApiKey = useSettingsStore((s) => s.setMistralApiKey);
+  const deepgramApiKey = useSettingsStore((s) => s.deepgramApiKey);
+  const setDeepgramApiKey = useSettingsStore((s) => s.setDeepgramApiKey);
   const customTranscriptionApiKey = useSettingsStore((s) => s.customTranscriptionApiKey);
   const setCustomTranscriptionApiKey = useSettingsStore((s) => s.setCustomTranscriptionApiKey);
   const effectiveLocal = mode === "local" ? true : mode === "cloud" ? false : useLocalWhisper;
@@ -313,10 +320,14 @@ export default function TranscriptionModelPicker({
   );
   const cloudProviderTabs = useMemo(() => {
     const visibleIds = new Set([...cloudProviders.map((p) => p.id), "custom"]);
-    return CLOUD_PROVIDER_TABS.filter((p) => visibleIds.has(p.id)).map((provider) =>
-      provider.id === "custom" ? { ...provider, name: t("transcription.customProvider") } : provider
+    const excluded = new Set(excludedCloudProviders ?? []);
+    return CLOUD_PROVIDER_TABS.filter((p) => visibleIds.has(p.id) && !excluded.has(p.id)).map(
+      (provider) =>
+        provider.id === "custom"
+          ? { ...provider, name: t("transcription.customProvider") }
+          : provider
     );
-  }, [cloudProviders, t]);
+  }, [cloudProviders, t, excludedCloudProviders]);
 
   useEffect(() => {
     selectedLocalModelRef.current = selectedLocalModel;
@@ -871,6 +882,7 @@ export default function TranscriptionModelPicker({
                           groq: "https://console.groq.com/keys",
                           mistral: "https://console.mistral.ai/api-keys",
                           openai: "https://platform.openai.com/api-keys",
+                          deepgram: "https://console.deepgram.com/",
                         }[selectedCloudProvider] || "https://platform.openai.com/api-keys"
                       )}
                       className="text-xs text-primary/70 hover:text-primary transition-colors cursor-pointer"
@@ -880,14 +892,20 @@ export default function TranscriptionModelPicker({
                   </div>
                   <ApiKeyInput
                     apiKey={
-                      { groq: groqApiKey, mistral: mistralApiKey, openai: openaiApiKey }[
-                        selectedCloudProvider
-                      ] || openaiApiKey
+                      {
+                        groq: groqApiKey,
+                        mistral: mistralApiKey,
+                        openai: openaiApiKey,
+                        deepgram: deepgramApiKey,
+                      }[selectedCloudProvider] || openaiApiKey
                     }
                     setApiKey={
-                      { groq: setGroqApiKey, mistral: setMistralApiKey, openai: setOpenaiApiKey }[
-                        selectedCloudProvider
-                      ] || setOpenaiApiKey
+                      {
+                        groq: setGroqApiKey,
+                        mistral: setMistralApiKey,
+                        openai: setOpenaiApiKey,
+                        deepgram: setDeepgramApiKey,
+                      }[selectedCloudProvider] || setOpenaiApiKey
                     }
                     label=""
                     helpText=""

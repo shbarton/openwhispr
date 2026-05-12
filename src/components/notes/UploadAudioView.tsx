@@ -527,6 +527,7 @@ export default function UploadAudioView({ onNoteCreated, onOpenSettings }: Uploa
         cloudTranscriptionBaseUrl={cloudTranscriptionBaseUrl}
         setCloudTranscriptionBaseUrl={setCloudTranscriptionBaseUrl}
         variant="settings"
+        excludedCloudProviders={["deepgram"]}
       />
     </Suspense>
   ) : null;

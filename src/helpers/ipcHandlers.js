@@ -2432,6 +2432,14 @@ class IPCHandlers {
       return this.environmentManager.saveMistralKey(key);
     });
 
+    ipcMain.handle("get-deepgram-key", async () => {
+      return this.environmentManager.getDeepgramKey();
+    });
+
+    ipcMain.handle("save-deepgram-key", async (event, key) => {
+      return this.environmentManager.saveDeepgramKey(key);
+    });
+
     ipcMain.handle(
       "proxy-mistral-transcription",
       async (event, { audioBuffer, model, language, contextBias }) => {
@@ -3597,6 +3605,12 @@ class IPCHandlers {
           } else if (provider === "mistral") {
             apiKey = this.environmentManager.getMistralKey();
             endpoint = MISTRAL_TRANSCRIPTION_URL;
+          } else if (provider === "deepgram") {
+            // Deepgram REST upload isn't implemented yet (BYOK is streaming-only).
+            // Fail explicitly rather than silently routing to OpenAI.
+            throw new Error(
+              "Deepgram BYOK retry is unavailable: REST upload is not yet supported. Re-record via the dictation hotkey to use Deepgram streaming."
+            );
           } else if (provider === "custom") {
             apiKey = this.environmentManager.getCustomTranscriptionKey();
             const base = (settings?.cloudTranscriptionBaseUrl || "").trim();
@@ -6734,10 +6748,36 @@ class IPCHandlers {
       return token;
     };
 
+    // Configures the shared `this.deepgramStreaming` instance for either
+    // OpenWhispr Cloud (Bearer + token-refresh URL) or BYOK (Token + the
+    // user's long-lived API key). Returns { ok, apiKey, error?, code? }.
+    const configureDeepgramAuth = (byok) => {
+      if (byok) {
+        const apiKey = this.environmentManager.getDeepgramKey();
+        if (!apiKey) {
+          return {
+            ok: false,
+            error: "Deepgram API key not configured",
+            code: "NO_API_KEY",
+          };
+        }
+        this.deepgramStreaming.setAuthHeaderPrefix("Token");
+        this.deepgramStreaming.setTokenRefreshFn(async () => apiKey);
+        return { ok: true, apiKey };
+      }
+      this.deepgramStreaming.setAuthHeaderPrefix("Bearer");
+      this.deepgramStreaming.setTokenRefreshFn(async () => {
+        if (!deepgramTokenWindowId) throw new Error("No window reference");
+        return fetchDeepgramStreamingTokenFromWindow(deepgramTokenWindowId);
+      });
+      return { ok: true, apiKey: null };
+    };
+
     ipcMain.handle("deepgram-streaming-warmup", async (event, options = {}) => {
       try {
+        const byok = options.byok === true;
         const apiUrl = getApiUrl();
-        if (!apiUrl) {
+        if (!byok && !apiUrl) {
           return { success: false, error: "API not configured", code: "NO_API" };
         }
 
@@ -6750,10 +6790,10 @@ class IPCHandlers {
           this.deepgramStreaming = new DeepgramStreaming();
         }
 
-        this.deepgramStreaming.setTokenRefreshFn(async () => {
-          if (!deepgramTokenWindowId) throw new Error("No window reference");
-          return fetchDeepgramStreamingTokenFromWindow(deepgramTokenWindowId);
-        });
+        const auth = configureDeepgramAuth(byok);
+        if (!auth.ok) {
+          return { success: false, error: auth.error, code: auth.code };
+        }
 
         if (this.deepgramStreaming.hasWarmConnection()) {
           debugLogger.debug("Deepgram connection already warm", {}, "streaming");
@@ -6762,8 +6802,12 @@ class IPCHandlers {
 
         let token = this.deepgramStreaming.getCachedToken();
         if (!token) {
-          debugLogger.debug("Fetching new Deepgram streaming token for warmup", {}, "streaming");
-          token = await fetchDeepgramStreamingToken(event);
+          if (byok) {
+            token = auth.apiKey;
+          } else {
+            debugLogger.debug("Fetching new Deepgram streaming token for warmup", {}, "streaming");
+            token = await fetchDeepgramStreamingToken(event);
+          }
         }
 
         await this.deepgramStreaming.warmup({ ...options, token });
@@ -6794,8 +6838,9 @@ class IPCHandlers {
 
       deepgramStreamingStartInProgress = true;
       try {
+        const byok = options.byok === true;
         const apiUrl = getApiUrl();
-        if (!apiUrl) {
+        if (!byok && !apiUrl) {
           return { success: false, error: "API not configured", code: "NO_API" };
         }
 
@@ -6808,10 +6853,10 @@ class IPCHandlers {
           this.deepgramStreaming = new DeepgramStreaming();
         }
 
-        this.deepgramStreaming.setTokenRefreshFn(async () => {
-          if (!deepgramTokenWindowId) throw new Error("No window reference");
-          return fetchDeepgramStreamingTokenFromWindow(deepgramTokenWindowId);
-        });
+        const auth = configureDeepgramAuth(byok);
+        if (!auth.ok) {
+          return { success: false, error: auth.error, code: auth.code };
+        }
 
         if (this.deepgramStreaming.isConnected) {
           debugLogger.debug("Deepgram cleaning up stale connection before start", {}, "streaming");
@@ -6819,12 +6864,20 @@ class IPCHandlers {
         }
 
         const hasWarm = this.deepgramStreaming.hasWarmConnection();
-        debugLogger.debug("Deepgram streaming start", { hasWarmConnection: hasWarm }, "streaming");
+        debugLogger.debug(
+          "Deepgram streaming start",
+          { hasWarmConnection: hasWarm, byok },
+          "streaming"
+        );
 
         let token = this.deepgramStreaming.getCachedToken();
         if (!token) {
-          debugLogger.debug("Fetching Deepgram streaming token from API", {}, "streaming");
-          token = await fetchDeepgramStreamingToken(event);
+          if (byok) {
+            token = auth.apiKey;
+          } else {
+            debugLogger.debug("Fetching Deepgram streaming token from API", {}, "streaming");
+            token = await fetchDeepgramStreamingToken(event);
+          }
           this.deepgramStreaming.cacheToken(token);
         } else {
           debugLogger.debug("Using cached Deepgram streaming token", {}, "streaming");
