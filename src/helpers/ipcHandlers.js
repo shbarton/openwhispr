@@ -346,6 +346,7 @@ class IPCHandlers {
     this.audioStorageManager = new AudioStorageManager();
     this._audioCleanupInterval = null;
     this._noteFilesEnabled = false;
+    this._noteFilesTemplatePath = "";
     this.speakerDiarizationEnabled = true;
     this.activeMeetingSpeakerConfig = null;
     liveSpeakerIdentifier.setDiarizationManager(this.diarizationManager);
@@ -391,9 +392,10 @@ class IPCHandlers {
     setImmediate(() => {
       const markdownMirror = require("./markdownMirror");
       const folderName = this._getFolderName(note.folder_id);
-      markdownMirror.writeNote(note, folderName);
+      const speakerMappings = note.transcript ? this._buildSpeakerMappings(note.id) : {};
+      markdownMirror.writeNote(note, folderName, speakerMappings);
       if (note.transcript) {
-        markdownMirror.writeTranscript(note, folderName, this._buildSpeakerMappings(note.id));
+        markdownMirror.writeTranscript(note, folderName, speakerMappings);
       }
     });
   }
@@ -7331,6 +7333,23 @@ class IPCHandlers {
       }
     });
 
+    ipcMain.handle("note-files-set-template-path", async (_event, templatePath) => {
+      try {
+        this._noteFilesTemplatePath = templatePath || "";
+        const markdownMirror = require("./markdownMirror");
+        markdownMirror.setTemplatePath(this._noteFilesTemplatePath);
+        if (this._noteFilesEnabled) this._rebuildMirror();
+        return { success: true };
+      } catch (error) {
+        debugLogger.error(
+          "Failed to set note-files template path",
+          { error: error.message },
+          "note-files"
+        );
+        return { success: false, error: error.message };
+      }
+    });
+
     ipcMain.handle("note-files-rebuild", async () => {
       try {
         if (!this._noteFilesEnabled) return { success: false, error: "Note files not enabled" };
@@ -7390,6 +7409,23 @@ class IPCHandlers {
         return { canceled: false, path: result.filePaths[0] };
       } catch (error) {
         debugLogger.error("Failed to pick folder", { error: error.message }, "note-files");
+        return { canceled: true };
+      }
+    });
+
+    ipcMain.handle("note-files-pick-template", async () => {
+      try {
+        const { dialog } = require("electron");
+        const result = await dialog.showOpenDialog({
+          properties: ["openFile"],
+          filters: [{ name: "Markdown", extensions: ["md", "markdown"] }],
+        });
+        if (result.canceled || !result.filePaths.length) {
+          return { canceled: true };
+        }
+        return { canceled: false, path: result.filePaths[0] };
+      } catch (error) {
+        debugLogger.error("Failed to pick template", { error: error.message }, "note-files");
         return { canceled: true };
       }
     });

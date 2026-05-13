@@ -514,9 +514,13 @@ declare global {
         options?: { skipRebuild?: boolean }
       ) => Promise<{ success: boolean; error?: string }>;
       noteFilesSetPath?: (path: string) => Promise<{ success: boolean; error?: string }>;
+      noteFilesSetTemplatePath?: (
+        path: string
+      ) => Promise<{ success: boolean; error?: string }>;
       noteFilesRebuild?: () => Promise<{ success: boolean; error?: string }>;
       noteFilesGetDefaultPath?: () => Promise<string>;
       noteFilesPickFolder?: () => Promise<{ canceled: boolean; path?: string }>;
+      noteFilesPickTemplate?: () => Promise<{ canceled: boolean; path?: string }>;
       showNoteFile?: (noteId: number) => Promise<{ success: boolean }>;
       showFolderInExplorer?: (folderName: string) => Promise<{ success: boolean }>;
 

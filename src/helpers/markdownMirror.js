@@ -5,6 +5,8 @@ const debugLogger = require("./debugLogger");
 class MarkdownMirror {
   constructor() {
     this._basePath = null;
+    this._templatePath = "";
+    this._templateContent = null;
   }
 
   init(basePath) {
@@ -21,6 +23,35 @@ class MarkdownMirror {
     return this._basePath;
   }
 
+  setTemplatePath(templatePath) {
+    this._templatePath = templatePath || "";
+    if (!this._templatePath) {
+      this._templateContent = null;
+      debugLogger.debug("Markdown mirror template cleared", {}, "note-files");
+      return;
+    }
+    try {
+      this._templateContent = fs.readFileSync(this._templatePath, "utf-8");
+      debugLogger.debug(
+        "Markdown mirror template loaded",
+        { templatePath: this._templatePath, bytes: this._templateContent.length },
+        "note-files"
+      );
+    } catch (err) {
+      // Keep prior content (if any) so a transient read error doesn't silently
+      // strip user formatting on the next write.
+      debugLogger.error(
+        "Failed to read note files template; keeping previous template",
+        { templatePath: this._templatePath, error: err.message },
+        "note-files"
+      );
+    }
+  }
+
+  hasTemplate() {
+    return !!this._templateContent;
+  }
+
   _slugify(title) {
     return (title || "Untitled")
       .replace(/[/\\?%*:|"<>]/g, "-")
@@ -28,6 +59,90 @@ class MarkdownMirror {
       .replace(/\s+/g, "-")
       .toLowerCase()
       .slice(0, 60);
+  }
+
+  _formatTimestamp(seconds) {
+    const s = Math.max(0, Math.floor(seconds));
+    const h = Math.floor(s / 3600);
+    const m = Math.floor((s % 3600) / 60);
+    const sec = s % 60;
+    if (h > 0) return `${h}h ${m}m ${sec}s`;
+    if (m > 0) return `${m}m ${sec}s`;
+    return `${sec}s`;
+  }
+
+  _buildTemplateContext(note, folderName, segments, speakerMappings) {
+    const safe = (v) => (v == null ? "" : String(v));
+    const created = note.created_at ? new Date(note.created_at) : new Date();
+    const recordedAtIso = isNaN(created.getTime()) ? "" : created.toISOString();
+    const dateStr = isNaN(created.getTime())
+      ? ""
+      : created.toLocaleDateString(undefined, { year: "numeric", month: "long", day: "numeric" });
+    const timeStr = isNaN(created.getTime())
+      ? ""
+      : created.toLocaleTimeString(undefined, { hour: "2-digit", minute: "2-digit" });
+
+    let participantsList = [];
+    try {
+      const parsed = JSON.parse(note.participants || "[]");
+      participantsList = parsed.map((p) => p?.name).filter(Boolean);
+    } catch {}
+
+    let durationSeconds = 0;
+    if (Array.isArray(segments) && segments.length > 0) {
+      const first = segments[0]?.timestamp || 0;
+      const last = segments[segments.length - 1]?.timestamp || first;
+      durationSeconds = Math.max(0, Math.round(last - first));
+    }
+
+    let transcriptMd = "";
+    if (Array.isArray(segments) && segments.length > 0) {
+      try {
+        const { formatMd } = require("./transcriptFormatter");
+        transcriptMd = formatMd(note, segments, speakerMappings || {});
+      } catch (err) {
+        debugLogger.error(
+          "Template render: failed to format transcript",
+          { noteId: note.id, error: err.message },
+          "note-files"
+        );
+      }
+    }
+
+    const audioPath = safe(note.audio_path || note.audio_file_path || "");
+    const audioFilename = audioPath ? path.basename(audioPath) : "";
+
+    return {
+      id: safe(note.id),
+      title: safe(note.title || "Untitled"),
+      slug: this._slugify(note.title),
+      type: safe(note.note_type || "personal"),
+      folder: safe(folderName || "Personal"),
+      description: safe(note.description || ""),
+      project: safe(note.project || ""),
+      tags: safe(note.tags || ""),
+      tags_yaml: "",
+      participants: participantsList.join(", "),
+      attendees: participantsList.join(", "),
+      trigger_app: safe(note.trigger_app || ""),
+      audio_path: audioPath,
+      audio_filename: audioFilename,
+      recorded_at: recordedAtIso,
+      created: safe(note.created_at || recordedAtIso),
+      updated: safe(note.updated_at || recordedAtIso),
+      date: dateStr,
+      time: timeStr,
+      duration: this._formatTimestamp(durationSeconds),
+      duration_seconds: String(durationSeconds),
+      transcript: transcriptMd,
+      transcript_with_speakers: transcriptMd,
+    };
+  }
+
+  _renderTemplate(template, context) {
+    return template.replace(/\{\{\s*(\w+)\s*\}\}/g, (match, key) =>
+      Object.prototype.hasOwnProperty.call(context, key) ? context[key] : match
+    );
   }
 
   _buildFrontmatter(note, folderName) {
@@ -51,7 +166,7 @@ class MarkdownMirror {
     return lines.join("\n");
   }
 
-  writeNote(note, folderName) {
+  writeNote(note, folderName, speakerMappings) {
     if (!this._basePath) return;
     try {
       const dirName = folderName || "Personal";
@@ -71,9 +186,30 @@ class MarkdownMirror {
         }
       }
 
-      const frontmatter = this._buildFrontmatter(note, dirName);
-      const body = note.enhanced_content || note.content || "";
-      fs.writeFileSync(newFilePath, `${frontmatter}\n\n${body}`, "utf-8");
+      let output;
+      if (this._templateContent) {
+        // Template path: render one self-contained file with {{transcript}}
+        // inlined; remove any stale -transcript.md sidecar from the previous
+        // (no-template) format.
+        let segments = [];
+        try {
+          segments = JSON.parse(note.transcript || "[]");
+        } catch {}
+        const ctx = this._buildTemplateContext(note, dirName, segments, speakerMappings || {});
+        output = this._renderTemplate(this._templateContent, ctx);
+        for (const stale of this._globTranscriptFiles(note.id)) {
+          try {
+            fs.unlinkSync(stale);
+          } catch {}
+        }
+      } else {
+        // Stock path: bare frontmatter + body, transcript lands in sidecar.
+        const frontmatter = this._buildFrontmatter(note, dirName);
+        const body = note.enhanced_content || note.content || "";
+        output = `${frontmatter}\n\n${body}`;
+      }
+
+      fs.writeFileSync(newFilePath, output, "utf-8");
     } catch (err) {
       debugLogger.error(
         "Failed to write note file",
@@ -85,6 +221,9 @@ class MarkdownMirror {
 
   writeTranscript(note, folderName, speakerMappings) {
     if (!this._basePath) return;
+    // When a template is configured, the transcript is inlined via the
+    // {{transcript}} substitution in writeNote; skip the sidecar file.
+    if (this._templateContent) return;
     try {
       const segments = JSON.parse(note.transcript || "[]");
       if (!segments.length) return;
@@ -180,9 +319,10 @@ class MarkdownMirror {
     try {
       for (const note of notes) {
         const folderName = folderMap[note.folder_id] || "Personal";
-        this.writeNote(note, folderName);
+        const speakerMappings = speakerMappingsMap?.[note.id] || {};
+        this.writeNote(note, folderName, speakerMappings);
         if (note.transcript) {
-          this.writeTranscript(note, folderName, speakerMappingsMap?.[note.id] || {});
+          this.writeTranscript(note, folderName, speakerMappings);
         }
       }
       debugLogger.info("Markdown mirror rebuild complete", { count: notes.length }, "note-files");

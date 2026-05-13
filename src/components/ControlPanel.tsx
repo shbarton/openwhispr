@@ -140,11 +140,17 @@ export default function ControlPanel() {
   }, [showAlertDialog, t]);
 
   useEffect(() => {
-    const { noteFilesEnabled, noteFilesPath } = useSettingsStore.getState();
+    const { noteFilesEnabled, noteFilesPath, noteFilesTemplatePath } =
+      useSettingsStore.getState();
     if (!noteFilesEnabled) return;
-    window.electronAPI?.noteFilesSetEnabled?.(true, noteFilesPath || undefined, {
-      skipRebuild: true,
-    });
+    (async () => {
+      await window.electronAPI?.noteFilesSetEnabled?.(true, noteFilesPath || undefined, {
+        skipRebuild: true,
+      });
+      if (noteFilesTemplatePath) {
+        await window.electronAPI?.noteFilesSetTemplatePath?.(noteFilesTemplatePath);
+      }
+    })();
   }, []);
 
   useEffect(() => {

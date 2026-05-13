@@ -13,6 +13,11 @@
       "description": "Automatically save notes and transcripts as files on disk, organized by folder",
       "path": "Save location",
       "changePath": "Change location",
+      "template": "Template file",
+      "templateDescription": "Optional. When set, each note is rendered through this Markdown template (variables: title, transcript, date, time, recorded_at, duration, participants, folder, type, id, slug, audio_path, audio_filename) and saved as a single self-contained file.",
+      "templateChoose": "Choose…",
+      "templateChange": "Change",
+      "templateClear": "Clear",
       "rebuild": "Rebuild all files",
       "rebuildDescription": "Re-sync all notes and transcripts to disk",
       "rebuildError": {

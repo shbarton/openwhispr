@@ -333,6 +333,7 @@ export interface SettingsState
   keepTranscriptionInClipboard: boolean;
   noteFilesEnabled: boolean;
   noteFilesPath: string;
+  noteFilesTemplatePath: string;
 
   transcriptionMode: InferenceMode;
   remoteTranscriptionType: SelfHostedType;
@@ -503,6 +504,7 @@ export interface SettingsState
   setKeepTranscriptionInClipboard: (value: boolean) => void;
   setNoteFilesEnabled: (value: boolean) => void;
   setNoteFilesPath: (value: string) => void;
+  setNoteFilesTemplatePath: (value: string) => void;
   setIsSignedIn: (value: boolean) => void;
 
   setChatAgentModel: (value: string) => void;
@@ -738,6 +740,7 @@ export const useSettingsStore = create<SettingsState>()((set, get) => ({
   keepTranscriptionInClipboard: readBoolean("keepTranscriptionInClipboard", false),
   noteFilesEnabled: readBoolean("noteFilesEnabled", false),
   noteFilesPath: readString("noteFilesPath", ""),
+  noteFilesTemplatePath: readString("noteFilesTemplatePath", ""),
   isSignedIn: readBoolean("isSignedIn", false),
 
   transcriptionMode: (() => {
@@ -1180,6 +1183,7 @@ export const useSettingsStore = create<SettingsState>()((set, get) => ({
   setKeepTranscriptionInClipboard: createBooleanSetter("keepTranscriptionInClipboard"),
   setNoteFilesEnabled: createBooleanSetter("noteFilesEnabled"),
   setNoteFilesPath: createStringSetter("noteFilesPath"),
+  setNoteFilesTemplatePath: createStringSetter("noteFilesTemplatePath"),
 
   setIsSignedIn: (value: boolean) => {
     if (isBrowser) localStorage.setItem("isSignedIn", String(value));

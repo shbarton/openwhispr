@@ -681,6 +681,8 @@ export default function SettingsPage({
     customDictionary,
     setCustomDictionary,
     noteFilesEnabled,
+    noteFilesTemplatePath,
+    setNoteFilesTemplatePath,
     setNoteFilesEnabled,
     noteFilesPath,
     setNoteFilesPath,
@@ -931,6 +933,18 @@ export default function SettingsPage({
     setNoteFilesPath(result.path);
     await window.electronAPI?.noteFilesSetPath?.(result.path);
   }, [setNoteFilesPath]);
+
+  const handleNoteFilesChangeTemplate = useCallback(async () => {
+    const result = await window.electronAPI?.noteFilesPickTemplate?.();
+    if (result?.canceled || !result?.path) return;
+    setNoteFilesTemplatePath(result.path);
+    await window.electronAPI?.noteFilesSetTemplatePath?.(result.path);
+  }, [setNoteFilesTemplatePath]);
+
+  const handleNoteFilesClearTemplate = useCallback(async () => {
+    setNoteFilesTemplatePath("");
+    await window.electronAPI?.noteFilesSetTemplatePath?.("");
+  }, [setNoteFilesTemplatePath]);
 
   const handleNoteFilesRebuild = useCallback(async () => {
     setNoteFilesRebuilding(true);
@@ -2223,6 +2237,37 @@ export default function SettingsPage({
                         >
                           {t("settings.noteFiles.changePath")}
                         </Button>
+                      </SettingsRow>
+                    </SettingsPanelRow>
+                    <SettingsPanelRow>
+                      <SettingsRow
+                        label={t("settings.noteFiles.template")}
+                        description={
+                          noteFilesTemplatePath || t("settings.noteFiles.templateDescription")
+                        }
+                      >
+                        <div className="flex gap-1.5">
+                          {noteFilesTemplatePath && (
+                            <Button
+                              variant="ghost"
+                              size="sm"
+                              className="h-7 text-xs"
+                              onClick={handleNoteFilesClearTemplate}
+                            >
+                              {t("settings.noteFiles.templateClear")}
+                            </Button>
+                          )}
+                          <Button
+                            variant="outline"
+                            size="sm"
+                            className="h-7 text-xs"
+                            onClick={handleNoteFilesChangeTemplate}
+                          >
+                            {noteFilesTemplatePath
+                              ? t("settings.noteFiles.templateChange")
+                              : t("settings.noteFiles.templateChoose")}
+                          </Button>
+                        </div>
                       </SettingsRow>
                     </SettingsPanelRow>
                     <SettingsPanelRow>

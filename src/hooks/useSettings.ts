@@ -285,6 +285,8 @@ function useSettingsInternal() {
     setNoteFilesEnabled: store.setNoteFilesEnabled,
     noteFilesPath: store.noteFilesPath,
     setNoteFilesPath: store.setNoteFilesPath,
+    noteFilesTemplatePath: store.noteFilesTemplatePath,
+    setNoteFilesTemplatePath: store.setNoteFilesTemplatePath,
     cloudBackupEnabled: store.cloudBackupEnabled,
     setCloudBackupEnabled: store.setCloudBackupEnabled,
     telemetryEnabled: store.telemetryEnabled,
