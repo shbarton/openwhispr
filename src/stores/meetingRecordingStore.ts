@@ -1,5 +1,5 @@
 import { create } from "zustand";
-import { getSettings, selectResolvedMeetingTranscription } from "./settingsStore";
+import { getSettings, selectResolvedMeetingTranscription, type SettingsState } from "./settingsStore";
 import { useStreamingProvidersStore } from "./streamingProvidersStore";
 import { isBuiltInMicrophone } from "../utils/audioDeviceUtils";
 import { getBaseLanguageCode } from "../utils/languageSupport";
@@ -127,16 +127,16 @@ const getMeetingTranscriptionOptions = () => {
   const catalog = useStreamingProvidersStore.getState().providers;
   const provider =
     catalog?.find((p) => p.id === resolved.cloudTranscriptionProvider) ?? catalog?.[0];
-  // Provider-specific BYOK key check. Without per-provider branches, picking
-  // Deepgram BYOK with no key would silently fall back to "openwhispr" only
-  // for OpenAI; for any other provider it would advertise BYOK as available
-  // even with no key, then fail late in the streaming IPC handler.
-  const byokKeyAvailable =
-    provider?.id === "openai"
-      ? !!state.openaiApiKey
-      : provider?.id === "deepgram"
-        ? !!state.deepgramApiKey
-        : true;
+  // Per-provider BYOK key field. Providers absent here advertise BYOK as
+  // available regardless of key — they don't gate on a renderer-side key
+  // (e.g. Cloud-only providers). Add an entry when a new provider has its
+  // own BYOK key in settings.
+  const BYOK_KEY_FIELD: Record<string, keyof SettingsState> = {
+    openai: "openaiApiKey",
+    deepgram: "deepgramApiKey",
+  };
+  const keyField = provider?.id ? BYOK_KEY_FIELD[provider.id] : undefined;
+  const byokKeyAvailable = keyField ? !!state[keyField] : true;
   const mode =
     resolved.cloudTranscriptionMode === "byok" && byokKeyAvailable ? "byok" : "openwhispr";
   if (!provider) {

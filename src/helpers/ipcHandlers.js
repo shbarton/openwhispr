@@ -34,6 +34,7 @@ const {
   DEFAULT_EXPECTED_SPEAKER_COUNT,
   MAX_SPEAKER_COUNT,
 } = require("../constants/speakerDetection.json");
+const modelRegistryData = require("../models/modelRegistryData.json");
 
 const STREAMING_CLIENT_BY_PROVIDER = {
   "openai-realtime": OpenAIRealtimeStreaming,
@@ -46,6 +47,34 @@ const ALLOWED_MEETING_PROVIDERS = new Set([
   "assemblyai-realtime",
   "deepgram-realtime",
 ]);
+
+// Local fallback used when OpenWhispr Cloud is unreachable (skipAuth /
+// BYOK / network error). Without it, useStreamingProvidersStore stays
+// null and meeting routing silently picks OpenAI regardless of the
+// user's BYOK provider choice. Derived from the registry so the model
+// list stays in sync. Only providers with a `streaming: true` model
+// are exposed as meeting providers.
+const LOCAL_NOTE_RECORDING_PROVIDERS = modelRegistryData.transcriptionProviders
+  .map((provider) => {
+    const streamingModels = provider.models.filter((m) => m.streaming);
+    if (streamingModels.length === 0) return null;
+    return {
+      id: provider.id,
+      name: provider.name,
+      models: streamingModels.map((m, i) => ({
+        id: m.id,
+        name: m.name,
+        ...(i === 0 && { default: true }),
+      })),
+    };
+  })
+  .filter(Boolean);
+
+const LOCAL_NOTE_RECORDING_CONFIG = Object.freeze({
+  success: true,
+  source: "local-fallback",
+  providers: LOCAL_NOTE_RECORDING_PROVIDERS,
+});
 
 function parseAttendees(raw) {
   if (!raw) return [];
@@ -4256,14 +4285,12 @@ class IPCHandlers {
 
       const StreamingClass =
         STREAMING_CLIENT_BY_PROVIDER[options.provider] ?? OpenAIRealtimeStreaming;
+      // BYOK Deepgram uses long-lived API keys (`Token`), not the
+      // ephemeral `Bearer` tokens Cloud issues.
       const isDeepgramByok =
         options.provider === "deepgram-realtime" && options.mode === "byok";
       for (const { ref, source } of pairs) {
         this[ref] = new StreamingClass();
-        // BYOK Deepgram uses long-lived API keys, which require
-        // `Authorization: Token <key>` rather than the `Bearer <ephemeralToken>`
-        // OpenWhispr Cloud uses. Without this, BYOK meeting WSs would 401.
-        // Mirrors the pattern dictation BYOK uses in the warmup/start IPCs.
         if (isDeepgramByok && typeof this[ref].setAuthHeaderPrefix === "function") {
           this[ref].setAuthHeaderPrefix("Token");
         }
@@ -6083,40 +6110,12 @@ class IPCHandlers {
     });
 
     ipcMain.handle("get-note-recording-config", async (event) => {
-      // Local fallback used when OpenWhispr Cloud is unreachable (skipAuth /
-      // BYOK mode / network error). Without this, useStreamingProvidersStore
-      // stays null and getMeetingTranscriptionOptions silently routes every
-      // meeting to OpenAI realtime, regardless of the user's Deepgram BYOK
-      // setting. Shape matches NoteRecordingProvider in streamingProvidersStore.ts.
-      const localFallback = () => ({
-        success: true,
-        source: "local-fallback",
-        providers: [
-          {
-            id: "openai",
-            name: "OpenAI",
-            models: [
-              { id: "gpt-4o-mini-transcribe", name: "GPT-4o Mini Transcribe", default: true },
-              { id: "gpt-4o-transcribe", name: "GPT-4o Transcribe" },
-            ],
-          },
-          {
-            id: "deepgram",
-            name: "Deepgram",
-            models: [
-              { id: "nova-3", name: "Nova-3", default: true },
-              { id: "nova-2", name: "Nova-2" },
-            ],
-          },
-        ],
-      });
-
       try {
         const apiUrl = getApiUrl();
-        if (!apiUrl) return localFallback();
+        if (!apiUrl) return LOCAL_NOTE_RECORDING_CONFIG;
 
         const authHeader = await getAuthHeader(event);
-        if (!Object.keys(authHeader).length) return localFallback();
+        if (!Object.keys(authHeader).length) return LOCAL_NOTE_RECORDING_CONFIG;
 
         const response = await proxyFetch(`${apiUrl}/api/note-recording-config`, {
           headers: authHeader,
@@ -6124,10 +6123,7 @@ class IPCHandlers {
 
         if (!response.ok) {
           if (response.status === 401) {
-            // Surface auth-expired through fallback so the catalog populates
-            // and meeting routing works for BYOK; renderer can still detect
-            // the expired session if it cares via `authStatus`.
-            return { ...localFallback(), authStatus: "expired" };
+            return { ...LOCAL_NOTE_RECORDING_CONFIG, authStatus: "expired" };
           }
           throw new Error(`API error: ${response.status}`);
         }
@@ -6136,7 +6132,7 @@ class IPCHandlers {
         return { success: true, ...data };
       } catch (error) {
         debugLogger.error("Note recording config fetch error:", error);
-        return localFallback();
+        return LOCAL_NOTE_RECORDING_CONFIG;
       }
     });
 

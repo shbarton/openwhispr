@@ -181,16 +181,9 @@ class DeepgramStreaming {
     this.keepAliveInterval = setInterval(() => {
       if (target && target.readyState === WebSocket.OPEN) {
         try {
-          // Deepgram's net0001 idle timeout only resets on audio data, not
-          // KeepAlive JSON, for *pre-audio* sessions. Warm connections always
-          // need silence audio (no audio will ever flow). Active connections
-          // need silence audio too until the first real audio frame arrives,
-          // then they can use KeepAlive JSON (audio flow resets the timer).
-          // The pre-audio gap matters now that connect() resolves on `open`
-          // for cold starts: if the renderer-side audio pipeline takes longer
-          // than KEEPALIVE_INTERVAL_MS to flush its first chunk (slow mic
-          // permission, getDisplayMedia prompt, etc.), JSON KeepAlives would
-          // be ignored and the socket would close.
+          // Deepgram's net0001 idle timeout ignores JSON KeepAlive for
+          // pre-audio sessions; only audio bytes reset it. Send silence
+          // until real audio has flowed.
           const needsSilence = isWarm || this.audioBytesSent === 0;
           target.send(needsSilence ? SILENCE_FRAME : JSON.stringify({ type: "KeepAlive" }));
         } catch (err) {
@@ -616,20 +609,12 @@ class DeepgramStreaming {
         headers: { Authorization: `${this.authHeaderPrefix} ${token}` },
       });
       this._connectStartedAt = connectStartedAt;
-      this._firstMessageLogged = false;
 
       this.ws.on("open", () => {
         const openMs = Date.now() - connectStartedAt;
         debugLogger.info("Deepgram WebSocket open", { openMs });
-        // Resolve connect() on `open` rather than on the first server message.
-        // Deepgram does not send any message until audio arrives, so callers
-        // that gate audio on connect() (notably the meeting pipeline:
-        // ipcHandlers.js connectRealtimeStreaming → meeting-transcription-start
-        // → renderer Promise.all → audio flush) deadlock until Deepgram's
-        // ~12.5s idle timer fires. Resolving here lets callers return and
-        // audio start flowing immediately. Dictation already sends audio
-        // before awaiting connect() (see audioManager.js), so this change
-        // doesn't alter dictation behavior.
+        // Resolve on open, not first message — Deepgram sends no message
+        // until audio arrives, which deadlocked the meeting pipeline.
         if (this.pendingResolve) {
           this.isConnected = true;
           this.sessionStartedAt = Date.now();
@@ -691,46 +676,6 @@ class DeepgramStreaming {
   handleMessage(data) {
     try {
       const message = JSON.parse(data.toString());
-
-      // Diagnostic: log when the first server message actually arrives,
-      // independent of when connect() resolved. Used to verify the
-      // open-vs-first-message gap (the meeting-BYOK deadlock fix lives
-      // here). The session itself is now started in the WS `open` handler
-      // for cold connections; warm connections still set isConnected via
-      // useWarmConnection() before this handler runs.
-      if (!this._firstMessageLogged && this._connectStartedAt) {
-        this._firstMessageLogged = true;
-        debugLogger.info("Deepgram first message", {
-          firstMessageType: message.type,
-          firstMsgMs: Date.now() - this._connectStartedAt,
-          openMs:
-            this.sessionStartedAt && this._connectStartedAt
-              ? this.sessionStartedAt - this._connectStartedAt
-              : null,
-        });
-      }
-
-      // Defense-in-depth: if a warm connection somehow reaches handleMessage
-      // before connect() has resolved (e.g. an unexpected race), still
-      // resolve the pending promise so callers don't hang forever.
-      if (this.pendingResolve) {
-        this.isConnected = true;
-        this.sessionStartedAt = this.sessionStartedAt || Date.now();
-        clearTimeout(this.connectionTimeout);
-        this.startKeepAlive(this.ws);
-        if (message.type === "Metadata") {
-          this.sessionId = message.request_id;
-        }
-        debugLogger.info("Deepgram session started", {
-          sessionId: this.sessionId,
-          firstMessageType: message.type,
-          resolvedOn: "first-message",
-          sessionStartMs: this._connectStartedAt ? Date.now() - this._connectStartedAt : null,
-        });
-        this.pendingResolve();
-        this.pendingResolve = null;
-        this.pendingReject = null;
-      }
 
       switch (message.type) {
         case "Metadata":

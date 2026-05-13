@@ -1332,10 +1332,6 @@ export const selectResolvedMeetingTranscription = (
   state: SettingsState
 ): ResolvedMeetingTranscription => {
   const catalog = useStreamingProvidersStore.getState().providers;
-  // Honor the user's meeting-specific provider choice, falling back to the
-  // global cloud provider, then to the catalog's first entry. Validate
-  // against the catalog so a stale setting (provider removed from catalog)
-  // doesn't crash routing.
   const userPick = state.meetingCloudTranscriptionProvider || state.cloudTranscriptionProvider;
   const userPickValid = userPick && catalog?.some((p) => p.id === userPick);
   const cloudTranscriptionProvider = userPickValid ? userPick : (catalog?.[0]?.id ?? "");
