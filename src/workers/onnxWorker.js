@@ -354,16 +354,14 @@ const handlers = {
 async function dispatch({ id, method, payload }) {
   const handler = handlers[method];
   if (!handler) {
-    return { reply: { id, error: { message: `unknown method: ${method}` } }, transferList: [] };
+    return { reply: { id, error: { message: `unknown method: ${method}` } } };
   }
   try {
     const result = await handler(payload || {});
-    const transferList = [];
-    if (result?.embeddingBuffer) transferList.push(result.embeddingBuffer);
-    return { reply: { id, result }, transferList };
+    return { reply: { id, result } };
   } catch (err) {
     log("error", "handler threw", { method, error: err?.message, stack: err?.stack });
-    return { reply: { id, error: { message: err?.message || String(err) } }, transferList: [] };
+    return { reply: { id, error: { message: err?.message || String(err) } } };
   }
 }
 
@@ -388,8 +386,12 @@ process.parentPort.once("message", ({ data, ports }) => {
     port = ports[0];
     port.on("message", async (event) => {
       const message = event.data;
-      const { reply, transferList } = await dispatch(message);
-      port.postMessage(reply, transferList);
+      // Electron utility-process MessagePort interprets postMessage's second arg
+      // as a transferable ports list, not a Worker-style transferList. Passing
+      // an ArrayBuffer there throws "Port at index N is not a valid port".
+      // Structured-clone the buffer instead.
+      const { reply } = await dispatch(message);
+      port.postMessage(reply);
     });
     port.on("close", () => {
       log("info", "port closed");
