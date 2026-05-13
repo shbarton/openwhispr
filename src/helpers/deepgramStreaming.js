@@ -592,6 +592,7 @@ class DeepgramStreaming {
     }
 
     const url = this.buildWebSocketUrl(options);
+    const connectStartedAt = Date.now();
     debugLogger.debug("Deepgram streaming connecting (cold start)");
 
     return new Promise((resolve, reject) => {
@@ -606,9 +607,12 @@ class DeepgramStreaming {
       this.ws = new WebSocket(url, {
         headers: { Authorization: `${this.authHeaderPrefix} ${token}` },
       });
+      this._connectStartedAt = connectStartedAt;
 
       this.ws.on("open", () => {
-        debugLogger.debug("Deepgram WebSocket connected");
+        debugLogger.info("Deepgram WebSocket open", {
+          openMs: Date.now() - connectStartedAt,
+        });
       });
 
       this.ws.on("message", (data) => {
@@ -669,9 +673,10 @@ class DeepgramStreaming {
         if (message.type === "Metadata") {
           this.sessionId = message.request_id;
         }
-        debugLogger.debug("Deepgram session started", {
+        debugLogger.info("Deepgram session started", {
           sessionId: this.sessionId,
           firstMessageType: message.type,
+          sessionStartMs: this._connectStartedAt ? Date.now() - this._connectStartedAt : null,
         });
         this.pendingResolve();
         this.pendingResolve = null;
