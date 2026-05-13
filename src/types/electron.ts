@@ -1612,6 +1612,7 @@ declare global {
           trigger?: "hotkey" | "manual" | "calendar-join";
         }) => void
       ) => () => void;
+      onMeetingHotkeyStop?: (callback: () => void) => () => void;
       onNavigateToNote?: (
         callback: (data: { noteId: number; folderId: number | null }) => void
       ) => () => void;

@@ -790,10 +790,33 @@ async function startApp() {
     }
   }
 
-  // Set up meeting mode hotkey
+  // Set up meeting mode hotkey — toggles the active meeting.
+  // Source of truth: live Deepgram WS connections in ipcHandlers (set by
+  // meeting-transcription-start, cleared by meeting-transcription-stop).
+  // Without this toggle, a second press always called startManualMeeting()
+  // which spawned a second "New note" while the renderer side-effect of
+  // navigating to it stopped the first recording.
+  let lastMeetingHotkeyAt = 0;
   const meetingHotkeyCallback = () => {
     if (hotkeyManager.isInListeningMode()) return;
-    debugLogger.info("Meeting hotkey triggered", {}, "meeting");
+
+    // Debounce so a held key or accidental double-press during the ~570ms
+    // WS startup window doesn't fire twice.
+    const now = Date.now();
+    if (now - lastMeetingHotkeyAt < 500) return;
+    lastMeetingHotkeyAt = now;
+
+    const isStreaming =
+      !!ipcHandlers?._meetingMicStreaming?.isConnected ||
+      !!ipcHandlers?._meetingSystemStreaming?.isConnected;
+
+    if (isStreaming) {
+      debugLogger.info("Meeting hotkey: stopping active meeting", {}, "meeting");
+      windowManager.sendToControlPanel("meeting-hotkey-stop");
+      return;
+    }
+
+    debugLogger.info("Meeting hotkey: starting new meeting", {}, "meeting");
     meetingDetectionEngine?.startManualMeeting();
   };
 

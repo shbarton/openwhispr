@@ -870,6 +870,10 @@ contextBridge.exposeInMainWorld("electronAPI", {
     "navigate-to-meeting-note",
     (callback) => (_event, data) => callback(data)
   ),
+  onMeetingHotkeyStop: registerListener(
+    "meeting-hotkey-stop",
+    (callback) => () => callback()
+  ),
   onNavigateToNote: registerListener(
     "navigate-to-note",
     (callback) => (_event, data) => callback(data)

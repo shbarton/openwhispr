@@ -28,6 +28,7 @@ import {
 import ControlPanelSidebar, { type ControlPanelView } from "./ControlPanelSidebar";
 import MeetingRecordingMount from "./MeetingRecordingMount";
 import MeetingRecordingPill from "./notes/MeetingRecordingPill";
+import { stopRecording as stopMeetingRecording } from "../stores/meetingRecordingStore";
 import WindowControls from "./WindowControls";
 
 import { getCachedPlatform } from "../utils/platform";
@@ -297,6 +298,13 @@ export default function ControlPanel() {
       ) {
         window.electronAPI?.snapToMeetingMode?.();
       }
+    });
+    return () => cleanup?.();
+  }, []);
+
+  useEffect(() => {
+    const cleanup = window.electronAPI?.onMeetingHotkeyStop?.(() => {
+      stopMeetingRecording().catch(() => {});
     });
     return () => cleanup?.();
   }, []);
