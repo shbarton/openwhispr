@@ -4256,8 +4256,17 @@ class IPCHandlers {
 
       const StreamingClass =
         STREAMING_CLIENT_BY_PROVIDER[options.provider] ?? OpenAIRealtimeStreaming;
+      const isDeepgramByok =
+        options.provider === "deepgram-realtime" && options.mode === "byok";
       for (const { ref, source } of pairs) {
         this[ref] = new StreamingClass();
+        // BYOK Deepgram uses long-lived API keys, which require
+        // `Authorization: Token <key>` rather than the `Bearer <ephemeralToken>`
+        // OpenWhispr Cloud uses. Without this, BYOK meeting WSs would 401.
+        // Mirrors the pattern dictation BYOK uses in the warmup/start IPCs.
+        if (isDeepgramByok && typeof this[ref].setAuthHeaderPrefix === "function") {
+          this[ref].setAuthHeaderPrefix("Token");
+        }
         attachMeetingStreamingHandlers(this[ref], win, source);
       }
 
