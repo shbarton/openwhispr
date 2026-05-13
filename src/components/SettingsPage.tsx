@@ -923,8 +923,13 @@ export default function SettingsPage({
     async (enabled: boolean) => {
       setNoteFilesEnabled(enabled);
       await window.electronAPI?.noteFilesSetEnabled?.(enabled, noteFilesPath || undefined);
+      // Re-apply the template after enabling so a configured path doesn't
+      // silently drop on the disable→enable cycle.
+      if (enabled && noteFilesTemplatePath) {
+        await window.electronAPI?.noteFilesSetTemplatePath?.(noteFilesTemplatePath);
+      }
     },
-    [setNoteFilesEnabled, noteFilesPath]
+    [setNoteFilesEnabled, noteFilesPath, noteFilesTemplatePath]
   );
 
   const handleNoteFilesChangePath = useCallback(async () => {

@@ -48,10 +48,6 @@ class MarkdownMirror {
     }
   }
 
-  hasTemplate() {
-    return !!this._templateContent;
-  }
-
   _slugify(title) {
     return (title || "Untitled")
       .replace(/[/\\?%*:|"<>]/g, "-")
@@ -186,24 +182,19 @@ class MarkdownMirror {
         }
       }
 
+      // Template branch renders one self-contained file with {{transcript}}
+      // inlined; the existing `<id>-*.md` cleanup above already removes the
+      // sidecar. Stock branch keeps the bare frontmatter + body shape and
+      // lets writeTranscript produce the sidecar.
       let output;
       if (this._templateContent) {
-        // Template path: render one self-contained file with {{transcript}}
-        // inlined; remove any stale -transcript.md sidecar from the previous
-        // (no-template) format.
         let segments = [];
         try {
           segments = JSON.parse(note.transcript || "[]");
         } catch {}
         const ctx = this._buildTemplateContext(note, dirName, segments, speakerMappings || {});
         output = this._renderTemplate(this._templateContent, ctx);
-        for (const stale of this._globTranscriptFiles(note.id)) {
-          try {
-            fs.unlinkSync(stale);
-          } catch {}
-        }
       } else {
-        // Stock path: bare frontmatter + body, transcript lands in sidecar.
         const frontmatter = this._buildFrontmatter(note, dirName);
         const body = note.enhanced_content || note.content || "";
         output = `${frontmatter}\n\n${body}`;

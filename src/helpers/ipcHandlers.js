@@ -346,7 +346,6 @@ class IPCHandlers {
     this.audioStorageManager = new AudioStorageManager();
     this._audioCleanupInterval = null;
     this._noteFilesEnabled = false;
-    this._noteFilesTemplatePath = "";
     this.speakerDiarizationEnabled = true;
     this.activeMeetingSpeakerConfig = null;
     liveSpeakerIdentifier.setDiarizationManager(this.diarizationManager);
@@ -7335,9 +7334,8 @@ class IPCHandlers {
 
     ipcMain.handle("note-files-set-template-path", async (_event, templatePath) => {
       try {
-        this._noteFilesTemplatePath = templatePath || "";
         const markdownMirror = require("./markdownMirror");
-        markdownMirror.setTemplatePath(this._noteFilesTemplatePath);
+        markdownMirror.setTemplatePath(templatePath || "");
         if (this._noteFilesEnabled) this._rebuildMirror();
         return { success: true };
       } catch (error) {
