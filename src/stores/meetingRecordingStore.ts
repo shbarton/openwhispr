@@ -127,7 +127,16 @@ const getMeetingTranscriptionOptions = () => {
   const catalog = useStreamingProvidersStore.getState().providers;
   const provider =
     catalog?.find((p) => p.id === resolved.cloudTranscriptionProvider) ?? catalog?.[0];
-  const byokKeyAvailable = provider?.id === "openai" ? !!state.openaiApiKey : true;
+  // Provider-specific BYOK key check. Without per-provider branches, picking
+  // Deepgram BYOK with no key would silently fall back to "openwhispr" only
+  // for OpenAI; for any other provider it would advertise BYOK as available
+  // even with no key, then fail late in the streaming IPC handler.
+  const byokKeyAvailable =
+    provider?.id === "openai"
+      ? !!state.openaiApiKey
+      : provider?.id === "deepgram"
+        ? !!state.deepgramApiKey
+        : true;
   const mode =
     resolved.cloudTranscriptionMode === "byok" && byokKeyAvailable ? "byok" : "openwhispr";
   if (!provider) {

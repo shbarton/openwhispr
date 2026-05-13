@@ -1332,9 +1332,13 @@ export const selectResolvedMeetingTranscription = (
   state: SettingsState
 ): ResolvedMeetingTranscription => {
   const catalog = useStreamingProvidersStore.getState().providers;
-  // TODO(1.8.0): Catalog has one cloud entry today (OpenAI Realtime).
-  // When a second is added, resolve as `meetingCloudTranscriptionProvider || cloudTranscriptionProvider || catalog[0]?.id`, then validate against catalog.
-  const cloudTranscriptionProvider = catalog?.[0]?.id ?? "";
+  // Honor the user's meeting-specific provider choice, falling back to the
+  // global cloud provider, then to the catalog's first entry. Validate
+  // against the catalog so a stale setting (provider removed from catalog)
+  // doesn't crash routing.
+  const userPick = state.meetingCloudTranscriptionProvider || state.cloudTranscriptionProvider;
+  const userPickValid = userPick && catalog?.some((p) => p.id === userPick);
+  const cloudTranscriptionProvider = userPickValid ? userPick : (catalog?.[0]?.id ?? "");
 
   return {
     useLocalWhisper: state.meetingUseLocalWhisper,
