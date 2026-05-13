@@ -6074,12 +6074,40 @@ class IPCHandlers {
     });
 
     ipcMain.handle("get-note-recording-config", async (event) => {
+      // Local fallback used when OpenWhispr Cloud is unreachable (skipAuth /
+      // BYOK mode / network error). Without this, useStreamingProvidersStore
+      // stays null and getMeetingTranscriptionOptions silently routes every
+      // meeting to OpenAI realtime, regardless of the user's Deepgram BYOK
+      // setting. Shape matches NoteRecordingProvider in streamingProvidersStore.ts.
+      const localFallback = () => ({
+        success: true,
+        source: "local-fallback",
+        providers: [
+          {
+            id: "openai",
+            name: "OpenAI",
+            models: [
+              { id: "gpt-4o-mini-transcribe", name: "GPT-4o Mini Transcribe", default: true },
+              { id: "gpt-4o-transcribe", name: "GPT-4o Transcribe" },
+            ],
+          },
+          {
+            id: "deepgram",
+            name: "Deepgram",
+            models: [
+              { id: "nova-3", name: "Nova-3", default: true },
+              { id: "nova-2", name: "Nova-2" },
+            ],
+          },
+        ],
+      });
+
       try {
         const apiUrl = getApiUrl();
-        if (!apiUrl) throw new Error("OpenWhispr API URL not configured");
+        if (!apiUrl) return localFallback();
 
         const authHeader = await getAuthHeader(event);
-        if (!Object.keys(authHeader).length) throw new Error("Not authenticated");
+        if (!Object.keys(authHeader).length) return localFallback();
 
         const response = await proxyFetch(`${apiUrl}/api/note-recording-config`, {
           headers: authHeader,
@@ -6087,7 +6115,10 @@ class IPCHandlers {
 
         if (!response.ok) {
           if (response.status === 401) {
-            return { success: false, error: "Session expired", code: "AUTH_EXPIRED" };
+            // Surface auth-expired through fallback so the catalog populates
+            // and meeting routing works for BYOK; renderer can still detect
+            // the expired session if it cares via `authStatus`.
+            return { ...localFallback(), authStatus: "expired" };
           }
           throw new Error(`API error: ${response.status}`);
         }
@@ -6096,7 +6127,7 @@ class IPCHandlers {
         return { success: true, ...data };
       } catch (error) {
         debugLogger.error("Note recording config fetch error:", error);
-        return null;
+        return localFallback();
       }
     });
 
