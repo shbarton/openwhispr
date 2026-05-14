@@ -48,23 +48,16 @@ export function VaultPathRow() {
   const validateAndSave = useCallback(async (path: string) => {
     if (!path.trim()) {
       setVaultPath("");
-      window.electronAPI?.setVaultPath?.(null);
+      await window.electronAPI?.setVaultPath?.(null);
       setStatus("idle");
       return;
     }
 
-    // Check if .chiron/properties-index.json exists
-    try {
-      const indexPath = `${path}/.chiron/properties-index.json`;
-      const exists = await window.electronAPI?.pathExists?.(indexPath);
-      if (exists) {
-        setVaultPath(path);
-        await window.electronAPI?.setVaultPath?.(path);
-        setStatus("valid");
-      } else {
-        setStatus("invalid");
-      }
-    } catch {
+    const result = await window.electronAPI?.setVaultPath?.(path);
+    if (result?.valid) {
+      setVaultPath(path);
+      setStatus("valid");
+    } else {
       setStatus("invalid");
     }
   }, [setVaultPath]);

@@ -9,7 +9,7 @@ const debugLogger = require("./debugLogger");
  * Architecture:
  * - Reads index once on setVaultPath()
  * - Watches for file changes (debounced)
- * - Pushes updates to listeners (for IPC broadcast)
+ * - Pushes updates to listeners only when content actually changed
  * - Caches last good result on parse errors
  */
 class VaultMetadataProvider {
@@ -18,16 +18,16 @@ class VaultMetadataProvider {
     this._watcher = null;
     this._debounceTimer = null;
     this._cache = { tags: [], projects: [], updatedAt: null };
+    this._cacheSignature = "";
     this._listeners = new Set();
   }
 
   /**
    * Set the vault path and start watching for changes.
    * @param {string|null} vaultPath - Path to the Calyx vault root (contains .chiron/)
+   * @returns {Promise<{ valid: boolean, error?: string }>}
    */
-  setVaultPath(vaultPath) {
-    console.log("[vault-metadata] setVaultPath called with:", vaultPath);
-    // Clean up old watcher
+  async setVaultPath(vaultPath) {
     if (this._watcher) {
       this._watcher.close();
       this._watcher = null;
@@ -40,34 +40,25 @@ class VaultMetadataProvider {
     this._vaultPath = vaultPath;
 
     if (!vaultPath) {
-      this._cache = { tags: [], projects: [], updatedAt: null };
-      this._notifyListeners();
+      this._setCache({ tags: [], projects: [], updatedAt: null });
       debugLogger.debug("Vault metadata provider cleared (no vault path)", {}, "vault-metadata");
-      return;
+      return { valid: true };
     }
 
-    // Validate vault path
     const indexPath = this._getIndexPath();
     if (!fs.existsSync(indexPath)) {
-      debugLogger.warn(
-        "Vault index not found",
-        { vaultPath, indexPath },
-        "vault-metadata"
-      );
-      this._cache = { tags: [], projects: [], updatedAt: null };
-      this._notifyListeners();
-      return;
+      debugLogger.warn("Vault index not found", { vaultPath, indexPath }, "vault-metadata");
+      this._setCache({ tags: [], projects: [], updatedAt: null });
+      return { valid: false, error: "Not a Calyx vault (.chiron/properties-index.json missing)" };
     }
 
-    // Initial load
-    this._loadIndex();
+    await this._loadIndex();
 
-    // Watch for changes using native fs.watch (debounced)
     try {
       this._watcher = fs.watch(indexPath, (eventType) => {
         if (eventType === "change") {
           clearTimeout(this._debounceTimer);
-          this._debounceTimer = setTimeout(() => this._loadIndex(), 300);
+          this._debounceTimer = setTimeout(() => this._loadIndex(), 1000);
         }
       });
 
@@ -83,6 +74,7 @@ class VaultMetadataProvider {
       { vaultPath, indexPath },
       "vault-metadata"
     );
+    return { valid: true };
   }
 
   _getIndexPath() {
@@ -91,30 +83,31 @@ class VaultMetadataProvider {
       : null;
   }
 
-  _loadIndex() {
+  async _loadIndex() {
     const indexPath = this._getIndexPath();
-    console.log("[vault-metadata] _loadIndex called, indexPath:", indexPath);
-    if (!indexPath || !fs.existsSync(indexPath)) {
-      console.log("[vault-metadata] Index path not found or doesn't exist");
+    if (!indexPath) return;
+
+    let raw;
+    try {
+      raw = await fs.promises.readFile(indexPath, "utf-8");
+    } catch (err) {
+      debugLogger.error(
+        "Failed to read vault index; keeping previous cache",
+        { error: err.message, indexPath },
+        "vault-metadata"
+      );
       return;
     }
 
     try {
-      const raw = fs.readFileSync(indexPath, "utf-8");
-      console.log("[vault-metadata] Read index file, size:", raw.length);
       const index = JSON.parse(raw);
-
-      // Extract tags: unique values from all snapshots[].properties.tags arrays
       const tagCounts = new Map();
-
-      // Extract projects: entries where type === "project"
       const projects = [];
 
       const snapshots = index.snapshots || {};
       for (const [uri, snapshot] of Object.entries(snapshots)) {
         const props = snapshot.properties || {};
 
-        // Collect tags with counts
         if (Array.isArray(props.tags)) {
           for (const t of props.tags) {
             const tag = String(t).trim();
@@ -124,59 +117,67 @@ class VaultMetadataProvider {
           }
         }
 
-        // Collect projects
         if (props.type === "project") {
-          // Extract project_id from URI or properties
           let projectId = props.project_id;
           if (!projectId) {
-            // Try to derive from URI: file:///path/to/vault/projects/my-project/index.md
             const match = uri.match(/projects\/([^/]+)\/index\.md$/);
             projectId = match ? match[1] : path.basename(path.dirname(decodeURIComponent(uri)));
           }
 
+          const rawTitle = props.title;
+          const titleStr =
+            typeof rawTitle === "string" && rawTitle.trim()
+              ? rawTitle
+              : projectId || "Untitled";
           projects.push({
             id: projectId,
-            title: props.title || projectId || "Untitled",
-            status: props.status || null,
+            title: titleStr,
+            status: typeof props.status === "string" ? props.status : null,
             tags: Array.isArray(props.tags) ? props.tags : [],
           });
         }
       }
 
-      // Sort tags by frequency (most used first), then alphabetically
       const tags = [...tagCounts.keys()].sort((a, b) => {
         const countDiff = (tagCounts.get(b) || 0) - (tagCounts.get(a) || 0);
         return countDiff !== 0 ? countDiff : a.localeCompare(b);
       });
 
-      // Sort projects: active first, then by title
       projects.sort((a, b) => {
         if (a.status === "active" && b.status !== "active") return -1;
         if (b.status === "active" && a.status !== "active") return 1;
-        return (a.title || "").localeCompare(b.title || "");
+        const aTitle = typeof a.title === "string" ? a.title : "";
+        const bTitle = typeof b.title === "string" ? b.title : "";
+        return aTitle.localeCompare(bTitle);
       });
 
-      this._cache = {
-        tags,
-        projects,
-        updatedAt: Date.now(),
-      };
+      this._setCache({ tags, projects, updatedAt: Date.now() });
 
       debugLogger.debug(
         "Vault metadata loaded",
         { tagCount: tags.length, projectCount: projects.length },
         "vault-metadata"
       );
-
-      this._notifyListeners();
     } catch (err) {
-      // Keep last good cache on parse error
       debugLogger.error(
-        "Failed to load vault index; keeping previous cache",
+        "Failed to parse vault index; keeping previous cache",
         { error: err.message, indexPath },
         "vault-metadata"
       );
     }
+  }
+
+  // Sets cache and notifies listeners only if the content signature changed.
+  // Skipping no-op notifies prevents thrashing renderers on unrelated vault saves.
+  _setCache(next) {
+    const signature = JSON.stringify({ tags: next.tags, projects: next.projects });
+    if (signature === this._cacheSignature) {
+      this._cache = next;
+      return;
+    }
+    this._cache = next;
+    this._cacheSignature = signature;
+    this._notifyListeners();
   }
 
   /**
@@ -184,7 +185,6 @@ class VaultMetadataProvider {
    * @returns {{ tags: string[], projects: Array<{id: string, title: string, status: string|null, tags: string[]}>, updatedAt: number|null }}
    */
   getMetadata() {
-    console.log("[vault-metadata] getMetadata called, cache:", { tags: this._cache.tags.length, projects: this._cache.projects.length });
     return this._cache;
   }
 

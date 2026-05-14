@@ -9,6 +9,7 @@ import { cn } from "../lib/utils";
 import { useNotes } from "../../stores/noteStore";
 import type { NoteItem, VaultMetadata, VaultProject } from "../../types/electron";
 import type { CalendarAttendee } from "../../types/calendar";
+import { getInitials, getInitialColor } from "../../utils/avatarUtils";
 
 export interface MeetingMetadata {
   title: string;
@@ -25,20 +26,6 @@ interface MeetingSetupDialogProps {
   onConfirm: (metadata: MeetingMetadata) => void;
   existingNote?: NoteItem | null;
   initialFolderId?: number | null;
-}
-
-function getInitials(displayName: string | null, email: string): string {
-  if (displayName) return displayName.charAt(0).toUpperCase();
-  return email.charAt(0).toUpperCase();
-}
-
-function getInitialColor(email: string): string {
-  let hash = 0;
-  for (let i = 0; i < email.length; i++) {
-    hash = email.charCodeAt(i) + ((hash << 5) - hash);
-  }
-  const h = Math.abs(hash) % 360;
-  return `hsl(${h}, 45%, 65%)`;
 }
 
 export default function MeetingSetupDialog({
@@ -127,9 +114,15 @@ export default function MeetingSetupDialog({
 
   // Compute merged project list (vault + local notes)
   const allProjects = useMemo(() => {
-    const vaultTitles = vaultMetadata.projects.map((p) => p.title);
+    const vaultTitles = vaultMetadata.projects
+      .map((p) => (typeof p.title === "string" ? p.title : ""))
+      .filter((t) => t.length > 0);
     const localProjects = [
-      ...new Set(notes.map((n) => n.project).filter((p): p is string => !!p)),
+      ...new Set(
+        notes
+          .map((n) => (typeof n.project === "string" ? n.project : ""))
+          .filter((p) => p.length > 0)
+      ),
     ];
     // Vault first (already sorted), then local-only
     const vaultSet = new Set(vaultTitles);
@@ -169,17 +162,27 @@ export default function MeetingSetupDialog({
     return available.filter((t) => t.toLowerCase().includes(q)).slice(0, 10);
   }, [allTags, tags, tagSearch]);
 
-  // Search contacts for participants
+  // Debounced contact search — keystrokes coalesce into one IPC call.
+  // Participant exclusion is applied at render time so adding/removing a
+  // participant doesn't re-fire the search.
+  const [rawContactResults, setRawContactResults] = useState<CalendarAttendee[]>([]);
   useEffect(() => {
     if (!participantsOpen) return;
     const query = participantSearch.trim();
-    window.electronAPI.searchContacts(query).then((result) => {
-      if (result.success) {
-        const existing = new Set(participants.map((p) => p.email));
-        setContactSuggestions(result.contacts.filter((c) => !existing.has(c.email)));
-      }
-    });
-  }, [participantSearch, participantsOpen, participants]);
+    const timer = setTimeout(() => {
+      window.electronAPI.searchContacts(query).then((result) => {
+        if (result.success) {
+          setRawContactResults(result.contacts);
+        }
+      });
+    }, 200);
+    return () => clearTimeout(timer);
+  }, [participantSearch, participantsOpen]);
+
+  useEffect(() => {
+    const existing = new Set(participants.map((p) => p.email));
+    setContactSuggestions(rawContactResults.filter((c) => !existing.has(c.email)));
+  }, [rawContactResults, participants]);
 
   const handleSelectProject = useCallback((p: string) => {
     setProject(p);

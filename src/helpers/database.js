@@ -451,7 +451,6 @@ class DatabaseManager {
         if (!err.message.includes("duplicate column")) throw err;
       }
 
-      // Template fields for meeting metadata (template-fields-ui feature)
       try {
         this.db.exec("ALTER TABLE notes ADD COLUMN description TEXT");
       } catch (err) {
@@ -883,7 +882,6 @@ class DatabaseManager {
         "deleted_at",
         "client_note_id",
         "cloud_id",
-        // Template fields for meeting metadata
         "description",
         "project",
         "tags",

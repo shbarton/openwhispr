@@ -125,7 +125,6 @@ contextBridge.exposeInMainWorld("electronAPI", {
     return () => ipcRenderer.removeListener("vault-metadata-changed", listener);
   },
   showOpenDialog: (options) => ipcRenderer.invoke("show-open-dialog", options),
-  pathExists: (filePath) => ipcRenderer.invoke("path-exists", filePath),
 
   // Action functions
   getActions: () => ipcRenderer.invoke("db-get-actions"),

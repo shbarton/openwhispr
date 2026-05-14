@@ -543,11 +543,10 @@ declare global {
       showFolderInExplorer?: (folderName: string) => Promise<{ success: boolean }>;
 
       // Vault metadata (Calyx integration)
-      setVaultPath?: (vaultPath: string | null) => Promise<{ success: boolean; error?: string }>;
+      setVaultPath?: (vaultPath: string | null) => Promise<{ success: boolean; valid?: boolean; error?: string }>;
       getVaultMetadata?: () => Promise<VaultMetadata>;
       onVaultMetadataChanged?: (callback: (metadata: VaultMetadata) => void) => () => void;
       showOpenDialog?: (options: { properties?: string[]; title?: string; filters?: { name: string; extensions: string[] }[] }) => Promise<{ canceled: boolean; filePaths: string[] }>;
-      pathExists?: (filePath: string) => Promise<boolean>;
 
       // Action operations
       getActions: () => Promise<ActionItem[]>;

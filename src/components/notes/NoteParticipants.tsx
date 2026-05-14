@@ -3,20 +3,7 @@ import { useTranslation } from "react-i18next";
 import { Users, X } from "lucide-react";
 import { Popover, PopoverTrigger, PopoverContent } from "../ui/popover";
 import type { CalendarAttendee } from "../../types/calendar";
-
-function getInitials(displayName: string | null, email: string): string {
-  if (displayName) return displayName.charAt(0).toUpperCase();
-  return email.charAt(0).toUpperCase();
-}
-
-function getInitialColor(email: string): string {
-  let hash = 0;
-  for (let i = 0; i < email.length; i++) {
-    hash = email.charCodeAt(i) + ((hash << 5) - hash);
-  }
-  const h = Math.abs(hash) % 360;
-  return `hsl(${h}, 45%, 65%)`;
-}
+import { getInitials, getInitialColor } from "../../utils/avatarUtils";
 
 interface ParticipantAvatarProps {
   email: string;

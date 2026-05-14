@@ -7431,14 +7431,13 @@ class IPCHandlers {
       }
     });
 
-    // Vault metadata handlers (Calyx integration for tags/projects autocomplete)
     ipcMain.handle("set-vault-path", async (_event, vaultPath) => {
       try {
-        this.vaultMetadataProvider.setVaultPath(vaultPath || null);
-        return { success: true };
+        const result = await this.vaultMetadataProvider.setVaultPath(vaultPath || null);
+        return { success: true, ...result };
       } catch (error) {
         debugLogger.error("Failed to set vault path", { error: error.message }, "vault-metadata");
-        return { success: false, error: error.message };
+        return { success: false, valid: false, error: error.message };
       }
     });
 
@@ -7446,26 +7445,13 @@ class IPCHandlers {
       return this.vaultMetadataProvider.getMetadata();
     });
 
-    // Subscribe to vault metadata changes and broadcast to all windows
     this.vaultMetadataProvider.onMetadataChanged((metadata) => {
       this.broadcastToWindows("vault-metadata-changed", metadata);
     });
 
-    // Generic dialog handler for settings UI
     ipcMain.handle("show-open-dialog", async (_event, options) => {
       const { dialog } = require("electron");
       return dialog.showOpenDialog(options);
-    });
-
-    // Check if a path exists (for vault validation)
-    ipcMain.handle("path-exists", async (_event, filePath) => {
-      const fs = require("fs");
-      try {
-        await fs.promises.access(filePath);
-        return true;
-      } catch {
-        return false;
-      }
     });
 
     ipcMain.handle("get-speaker-mappings", async (_event, noteId) => {
