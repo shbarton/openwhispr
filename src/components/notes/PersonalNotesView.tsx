@@ -45,6 +45,7 @@ import NoteEditor from "./NoteEditor";
 import ActionPicker from "./ActionPicker";
 import ActionManagerDialog from "./ActionManagerDialog";
 import AddNotesToFolderDialog from "./AddNotesToFolderDialog";
+import MeetingSetupDialog, { type MeetingMetadata } from "./MeetingSetupDialog";
 import { useActionProcessing } from "../../hooks/useActionProcessing";
 import { useSettingsStore, selectIsCloudCleanupMode } from "../../stores/settingsStore";
 import { useFolderManagement } from "../../hooks/useFolderManagement";
@@ -116,6 +117,7 @@ export default function PersonalNotesView({
   const [newNoteFolderId, setNewNoteFolderId] = useState<string>("");
   const [isCreatingNewNoteFolder, setIsCreatingNewNoteFolder] = useState(false);
   const [newNoteFolderName, setNewNoteFolderName] = useState("");
+  const [showMeetingSetup, setShowMeetingSetup] = useState(false);
   const saveTimeoutRef = useRef<NodeJS.Timeout | null>(null);
   const enhancedSaveTimeoutRef = useRef<NodeJS.Timeout | null>(null);
   const activeNoteRef = useRef<number | null>(null);
@@ -354,6 +356,31 @@ export default function PersonalNotesView({
     setNewNoteFolderId(personal ? String(personal.id) : folders[0] ? String(folders[0].id) : "");
     setShowNewNoteDialog(true);
   }, [folders]);
+
+  const handleOpenMeetingSetup = useCallback(() => {
+    setShowMeetingSetup(true);
+  }, []);
+
+  const handleMeetingMetadataConfirm = useCallback(
+    async (metadata: MeetingMetadata) => {
+      if (activeNoteId) {
+        // Update existing note with metadata
+        await window.electronAPI.updateNote(activeNoteId, {
+          title: metadata.title,
+          folder_id: metadata.folderId,
+          participants: JSON.stringify(metadata.participants),
+          project: metadata.project || null,
+          tags: metadata.tags.length > 0 ? metadata.tags.join(", ") : null,
+          description: metadata.description || null,
+        });
+        // Refresh the note in store
+        await initializeNotes(null, 50, activeFolderId);
+        loadFolders();
+      }
+      setShowMeetingSetup(false);
+    },
+    [activeNoteId, activeFolderId, loadFolders]
+  );
 
   const handleNewNoteFolderChange = useCallback((val: string) => {
     if (val === "__create_new__") {
@@ -984,6 +1011,7 @@ export default function PersonalNotesView({
               folders={folders}
               onMoveToFolder={handleMoveToFolder}
               onCreateFolderAndMove={handleCreateFolderAndMove}
+              onOpenMeetingSetup={handleOpenMeetingSetup}
               actionProcessingState={actionProcessingState}
               actionName={actionName}
               actionPicker={
@@ -1177,6 +1205,14 @@ export default function PersonalNotesView({
           onNotesAdded={handleNotesAdded}
         />
       )}
+
+      <MeetingSetupDialog
+        open={showMeetingSetup}
+        onOpenChange={setShowMeetingSetup}
+        onConfirm={handleMeetingMetadataConfirm}
+        existingNote={activeNote}
+        initialFolderId={activeFolderId}
+      />
 
       <Dialog
         open={showNewNoteDialog}

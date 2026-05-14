@@ -95,6 +95,14 @@ export default function App() {
   const panelStartPosition = useSettingsStore((s) => s.panelStartPosition);
   const prevAutoHideRef = useRef(floatingIconAutoHide);
 
+  // Initialize vault path for Calyx integration (tags/projects autocomplete)
+  const vaultPath = useSettingsStore((s) => s.vaultPath);
+  useEffect(() => {
+    if (vaultPath) {
+      window.electronAPI?.setVaultPath?.(vaultPath);
+    }
+  }, [vaultPath]);
+
   const setWindowInteractivity = React.useCallback((shouldCapture) => {
     window.electronAPI?.setMainWindowInteractivity?.(shouldCapture);
   }, []);

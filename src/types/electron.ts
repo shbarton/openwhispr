@@ -60,6 +60,10 @@ export interface NoteItem {
   client_note_id: string;
   sync_status: "synced" | "pending" | "error";
   deleted_at: string | null;
+  // Template fields for meeting metadata
+  description: string | null;
+  project: string | null;
+  tags: string | null;
 }
 
 export interface FolderItem {
@@ -73,6 +77,19 @@ export interface FolderItem {
   cloud_id: string | null;
   sync_status: "synced" | "pending" | "error";
   deleted_at: string | null;
+}
+
+export interface VaultProject {
+  id: string;
+  title: string;
+  status: string | null;
+  tags: string[];
+}
+
+export interface VaultMetadata {
+  tags: string[];
+  projects: VaultProject[];
+  updatedAt: number | null;
 }
 
 export interface ActionItem {
@@ -454,7 +471,8 @@ declare global {
         noteType?: string,
         sourceFile?: string | null,
         audioDuration?: number | null,
-        folderId?: number | null
+        folderId?: number | null,
+        metadata?: { description?: string; project?: string; tags?: string }
       ) => Promise<{ success: boolean; note?: NoteItem }>;
       getNote: (id: number) => Promise<NoteItem | null>;
       getNotes: (
@@ -523,6 +541,13 @@ declare global {
       noteFilesPickTemplate?: () => Promise<{ canceled: boolean; path?: string }>;
       showNoteFile?: (noteId: number) => Promise<{ success: boolean }>;
       showFolderInExplorer?: (folderName: string) => Promise<{ success: boolean }>;
+
+      // Vault metadata (Calyx integration)
+      setVaultPath?: (vaultPath: string | null) => Promise<{ success: boolean; error?: string }>;
+      getVaultMetadata?: () => Promise<VaultMetadata>;
+      onVaultMetadataChanged?: (callback: (metadata: VaultMetadata) => void) => () => void;
+      showOpenDialog?: (options: { properties?: string[]; title?: string; filters?: { name: string; extensions: string[] }[] }) => Promise<{ canceled: boolean; filePaths: string[] }>;
+      pathExists?: (filePath: string) => Promise<boolean>;
 
       // Action operations
       getActions: () => Promise<ActionItem[]>;

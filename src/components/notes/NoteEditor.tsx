@@ -13,6 +13,7 @@ import {
   Search,
   Plus,
   Check,
+  Pencil,
 } from "lucide-react";
 import { RichTextEditor } from "../ui/RichTextEditor";
 import type { Editor } from "@tiptap/react";
@@ -103,6 +104,7 @@ interface NoteEditorProps {
   folders?: FolderItem[];
   onMoveToFolder?: (noteId: number, folderId: number) => void;
   onCreateFolderAndMove?: (noteId: number, folderName: string) => void;
+  onOpenMeetingSetup?: () => void;
 }
 
 export default function NoteEditor({
@@ -139,6 +141,7 @@ export default function NoteEditor({
   folders,
   onMoveToFolder,
   onCreateFolderAndMove,
+  onOpenMeetingSetup,
 }: NoteEditorProps) {
   const { t } = useTranslation();
   const [viewMode, setViewMode] = useState<MeetingViewMode>("raw");
@@ -608,6 +611,15 @@ export default function NoteEditor({
               </span>
             )}
             <NoteParticipants noteId={note.id} participants={parsedParticipants} />
+            {onOpenMeetingSetup && (
+              <button
+                onClick={onOpenMeetingSetup}
+                className="inline-flex items-center gap-1.5 text-[11px] px-1.5 py-0.5 rounded-md border border-border/70 dark:border-white/25 text-foreground/50 dark:text-foreground/35 hover:text-foreground/60 hover:border-border/60 hover:bg-foreground/3 dark:hover:text-foreground/40 dark:hover:border-white/10 dark:hover:bg-white/3 transition-all duration-150 cursor-pointer outline-none"
+              >
+                <Pencil size={10} className="shrink-0" />
+                {t("notes.editor.meetingDetails", "Meeting details")}
+              </button>
+            )}
             {folders && onMoveToFolder && (
               <DropdownMenu
                 onOpenChange={(open) => {

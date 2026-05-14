@@ -68,7 +68,7 @@ contextBridge.exposeInMainWorld("electronAPI", {
   undoLearnedCorrections: (words) => ipcRenderer.invoke("undo-learned-corrections", words),
 
   // Note functions
-  saveNote: (title, content, noteType, sourceFile, audioDuration, folderId) =>
+  saveNote: (title, content, noteType, sourceFile, audioDuration, folderId, metadata) =>
     ipcRenderer.invoke(
       "db-save-note",
       title,
@@ -76,7 +76,8 @@ contextBridge.exposeInMainWorld("electronAPI", {
       noteType,
       sourceFile,
       audioDuration,
-      folderId
+      folderId,
+      metadata
     ),
   getNote: (id) => ipcRenderer.invoke("db-get-note", id),
   getNotes: (noteType, limit, folderId) =>
@@ -114,6 +115,17 @@ contextBridge.exposeInMainWorld("electronAPI", {
   noteFilesPickTemplate: () => ipcRenderer.invoke("note-files-pick-template"),
   showNoteFile: (noteId) => ipcRenderer.invoke("show-note-file", noteId),
   showFolderInExplorer: (folderName) => ipcRenderer.invoke("show-folder-in-explorer", folderName),
+
+  // Vault metadata (Calyx integration for tags/projects autocomplete)
+  setVaultPath: (vaultPath) => ipcRenderer.invoke("set-vault-path", vaultPath),
+  getVaultMetadata: () => ipcRenderer.invoke("get-vault-metadata"),
+  onVaultMetadataChanged: (callback) => {
+    const listener = (_event, metadata) => callback?.(metadata);
+    ipcRenderer.on("vault-metadata-changed", listener);
+    return () => ipcRenderer.removeListener("vault-metadata-changed", listener);
+  },
+  showOpenDialog: (options) => ipcRenderer.invoke("show-open-dialog", options),
+  pathExists: (filePath) => ipcRenderer.invoke("path-exists", filePath),
 
   // Action functions
   getActions: () => ipcRenderer.invoke("db-get-actions"),

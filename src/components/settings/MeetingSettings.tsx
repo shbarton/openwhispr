@@ -1,10 +1,12 @@
-import { useCallback } from "react";
+import { useCallback, useState } from "react";
 import { useTranslation } from "react-i18next";
-import { Cloud, Key, Cpu, Network } from "lucide-react";
+import { Cloud, Key, Cpu, Network, FolderOpen, Check, X } from "lucide-react";
 import { useSettingsStore } from "../../stores/settingsStore";
 import { InferenceModeSelector, SettingsRow } from "../ui/SettingsSection";
 import type { InferenceModeOption } from "../ui/SettingsSection";
 import { Toggle } from "../ui/toggle";
+import { Input } from "../ui/input";
+import { Button } from "../ui/button";
 import TranscriptionModelPicker from "../TranscriptionModelPicker";
 import SelfHostedPanel from "../SelfHostedPanel";
 import type { InferenceMode } from "../../types/electron";
@@ -20,6 +22,106 @@ export function MeetingSpeakerDetectionRow() {
       description={t("settings.meeting.speakerDetection.description")}
     >
       <Toggle checked={speakerDiarizationEnabled} onChange={setSpeakerDiarizationEnabled} />
+    </SettingsRow>
+  );
+}
+
+export function VaultPathRow() {
+  const { t } = useTranslation();
+  const vaultPath = useSettingsStore((s) => s.vaultPath);
+  const setVaultPath = useSettingsStore((s) => s.setVaultPath);
+  const [localPath, setLocalPath] = useState(vaultPath || "");
+  const [status, setStatus] = useState<"idle" | "valid" | "invalid">("idle");
+
+  const handleBrowse = useCallback(async () => {
+    const result = await window.electronAPI?.showOpenDialog?.({
+      properties: ["openDirectory"],
+      title: t("settings.meeting.vaultPath.browseTitle", "Select Calyx Vault"),
+    });
+    if (result?.filePaths?.[0]) {
+      const path = result.filePaths[0];
+      setLocalPath(path);
+      validateAndSave(path);
+    }
+  }, [t]);
+
+  const validateAndSave = useCallback(async (path: string) => {
+    if (!path.trim()) {
+      setVaultPath("");
+      window.electronAPI?.setVaultPath?.(null);
+      setStatus("idle");
+      return;
+    }
+
+    // Check if .chiron/properties-index.json exists
+    try {
+      const indexPath = `${path}/.chiron/properties-index.json`;
+      const exists = await window.electronAPI?.pathExists?.(indexPath);
+      if (exists) {
+        setVaultPath(path);
+        await window.electronAPI?.setVaultPath?.(path);
+        setStatus("valid");
+      } else {
+        setStatus("invalid");
+      }
+    } catch {
+      setStatus("invalid");
+    }
+  }, [setVaultPath]);
+
+  const handlePathChange = useCallback((e: React.ChangeEvent<HTMLInputElement>) => {
+    setLocalPath(e.target.value);
+    setStatus("idle");
+  }, []);
+
+  const handleBlur = useCallback(() => {
+    if (localPath !== vaultPath) {
+      validateAndSave(localPath);
+    }
+  }, [localPath, vaultPath, validateAndSave]);
+
+  const handleKeyDown = useCallback((e: React.KeyboardEvent) => {
+    if (e.key === "Enter") {
+      validateAndSave(localPath);
+    }
+  }, [localPath, validateAndSave]);
+
+  return (
+    <SettingsRow
+      label={t("settings.meeting.vaultPath.title", "Calyx Vault")}
+      description={t("settings.meeting.vaultPath.description", "Path to your Calyx vault for tags and projects autocomplete in meeting notes.")}
+    >
+      <div className="flex items-center gap-2 w-full max-w-sm">
+        <div className="relative flex-1">
+          <Input
+            value={localPath}
+            onChange={handlePathChange}
+            onBlur={handleBlur}
+            onKeyDown={handleKeyDown}
+            placeholder={t("settings.meeting.vaultPath.placeholder", "/path/to/vault")}
+            className="h-8 text-xs pr-7"
+          />
+          {status === "valid" && (
+            <Check size={14} className="absolute right-2 top-1/2 -translate-y-1/2 text-emerald-500" />
+          )}
+          {status === "invalid" && (
+            <X size={14} className="absolute right-2 top-1/2 -translate-y-1/2 text-destructive" />
+          )}
+        </div>
+        <Button
+          variant="outline"
+          size="sm"
+          onClick={handleBrowse}
+          className="h-8 px-2 shrink-0"
+        >
+          <FolderOpen size={14} />
+        </Button>
+      </div>
+      {status === "invalid" && (
+        <p className="text-xs text-destructive mt-1">
+          {t("settings.meeting.vaultPath.invalid", "Not a valid Calyx vault (no .chiron/properties-index.json)")}
+        </p>
+      )}
     </SettingsRow>
   );
 }
@@ -157,6 +259,7 @@ export function MeetingTranscriptionPanel() {
         </>
       )}
       <MeetingSpeakerDetectionRow />
+      <VaultPathRow />
     </div>
   );
 }

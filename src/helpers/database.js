@@ -451,6 +451,23 @@ class DatabaseManager {
         if (!err.message.includes("duplicate column")) throw err;
       }
 
+      // Template fields for meeting metadata (template-fields-ui feature)
+      try {
+        this.db.exec("ALTER TABLE notes ADD COLUMN description TEXT");
+      } catch (err) {
+        if (!err.message.includes("duplicate column")) throw err;
+      }
+      try {
+        this.db.exec("ALTER TABLE notes ADD COLUMN project TEXT");
+      } catch (err) {
+        if (!err.message.includes("duplicate column")) throw err;
+      }
+      try {
+        this.db.exec("ALTER TABLE notes ADD COLUMN tags TEXT");
+      } catch (err) {
+        if (!err.message.includes("duplicate column")) throw err;
+      }
+
       // Sync columns for folders
       try {
         this.db.exec("ALTER TABLE folders ADD COLUMN client_folder_id TEXT");
@@ -764,7 +781,8 @@ class DatabaseManager {
     noteType = "personal",
     sourceFile = null,
     audioDuration = null,
-    folderId = null
+    folderId = null,
+    metadata = {}
   ) {
     try {
       if (!this.db) {
@@ -778,8 +796,12 @@ class DatabaseManager {
         folderId = defaultFolder?.id || null;
       }
       const clientNoteId = randomUUID();
+
+      // Extract template fields from metadata
+      const { description = null, project = null, tags = null } = metadata || {};
+
       const stmt = this.db.prepare(
-        "INSERT INTO notes (title, content, note_type, source_file, audio_duration_seconds, folder_id, client_note_id) VALUES (?, ?, ?, ?, ?, ?, ?)"
+        "INSERT INTO notes (title, content, note_type, source_file, audio_duration_seconds, folder_id, client_note_id, description, project, tags) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)"
       );
       const result = stmt.run(
         title,
@@ -788,7 +810,10 @@ class DatabaseManager {
         sourceFile,
         audioDuration,
         folderId,
-        clientNoteId
+        clientNoteId,
+        description,
+        project,
+        tags
       );
 
       const fetchStmt = this.db.prepare("SELECT * FROM notes WHERE id = ?");
@@ -858,6 +883,10 @@ class DatabaseManager {
         "deleted_at",
         "client_note_id",
         "cloud_id",
+        // Template fields for meeting metadata
+        "description",
+        "project",
+        "tags",
       ];
       const fields = [];
       const values = [];

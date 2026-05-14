@@ -35,6 +35,7 @@ const {
   MAX_SPEAKER_COUNT,
 } = require("../constants/speakerDetection.json");
 const modelRegistryData = require("../models/modelRegistryData.json");
+const { VaultMetadataProvider } = require("./vaultMetadata");
 
 const STREAMING_CLIENT_BY_PROVIDER = {
   "openai-realtime": OpenAIRealtimeStreaming,
@@ -348,6 +349,7 @@ class IPCHandlers {
     this._noteFilesEnabled = false;
     this.speakerDiarizationEnabled = true;
     this.activeMeetingSpeakerConfig = null;
+    this.vaultMetadataProvider = new VaultMetadataProvider();
     liveSpeakerIdentifier.setDiarizationManager(this.diarizationManager);
     this._setupTextEditMonitor();
     this._setupAudioCleanup();
@@ -903,14 +905,15 @@ class IPCHandlers {
 
     ipcMain.handle(
       "db-save-note",
-      async (event, title, content, noteType, sourceFile, audioDuration, folderId) => {
+      async (event, title, content, noteType, sourceFile, audioDuration, folderId, metadata) => {
         const result = this.databaseManager.saveNote(
           title,
           content,
           noteType,
           sourceFile,
           audioDuration,
-          folderId
+          folderId,
+          metadata
         );
         if (result?.success && result?.note) {
           setImmediate(() => this.broadcastToWindows("note-added", result.note));
@@ -7425,6 +7428,43 @@ class IPCHandlers {
       } catch (error) {
         debugLogger.error("Failed to pick template", { error: error.message }, "note-files");
         return { canceled: true };
+      }
+    });
+
+    // Vault metadata handlers (Calyx integration for tags/projects autocomplete)
+    ipcMain.handle("set-vault-path", async (_event, vaultPath) => {
+      try {
+        this.vaultMetadataProvider.setVaultPath(vaultPath || null);
+        return { success: true };
+      } catch (error) {
+        debugLogger.error("Failed to set vault path", { error: error.message }, "vault-metadata");
+        return { success: false, error: error.message };
+      }
+    });
+
+    ipcMain.handle("get-vault-metadata", async () => {
+      return this.vaultMetadataProvider.getMetadata();
+    });
+
+    // Subscribe to vault metadata changes and broadcast to all windows
+    this.vaultMetadataProvider.onMetadataChanged((metadata) => {
+      this.broadcastToWindows("vault-metadata-changed", metadata);
+    });
+
+    // Generic dialog handler for settings UI
+    ipcMain.handle("show-open-dialog", async (_event, options) => {
+      const { dialog } = require("electron");
+      return dialog.showOpenDialog(options);
+    });
+
+    // Check if a path exists (for vault validation)
+    ipcMain.handle("path-exists", async (_event, filePath) => {
+      const fs = require("fs");
+      try {
+        await fs.promises.access(filePath);
+        return true;
+      } catch {
+        return false;
       }
     });
 

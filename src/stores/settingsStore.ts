@@ -334,6 +334,7 @@ export interface SettingsState
   noteFilesEnabled: boolean;
   noteFilesPath: string;
   noteFilesTemplatePath: string;
+  vaultPath: string;
 
   transcriptionMode: InferenceMode;
   remoteTranscriptionType: SelfHostedType;
@@ -505,6 +506,7 @@ export interface SettingsState
   setNoteFilesEnabled: (value: boolean) => void;
   setNoteFilesPath: (value: string) => void;
   setNoteFilesTemplatePath: (value: string) => void;
+  setVaultPath: (value: string) => void;
   setIsSignedIn: (value: boolean) => void;
 
   setChatAgentModel: (value: string) => void;
@@ -741,6 +743,7 @@ export const useSettingsStore = create<SettingsState>()((set, get) => ({
   noteFilesEnabled: readBoolean("noteFilesEnabled", false),
   noteFilesPath: readString("noteFilesPath", ""),
   noteFilesTemplatePath: readString("noteFilesTemplatePath", ""),
+  vaultPath: readString("vaultPath", ""),
   isSignedIn: readBoolean("isSignedIn", false),
 
   transcriptionMode: (() => {
@@ -1184,6 +1187,7 @@ export const useSettingsStore = create<SettingsState>()((set, get) => ({
   setNoteFilesEnabled: createBooleanSetter("noteFilesEnabled"),
   setNoteFilesPath: createStringSetter("noteFilesPath"),
   setNoteFilesTemplatePath: createStringSetter("noteFilesTemplatePath"),
+  setVaultPath: createStringSetter("vaultPath"),
 
   setIsSignedIn: (value: boolean) => {
     if (isBrowser) localStorage.setItem("isSignedIn", String(value));
