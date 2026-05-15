@@ -88,7 +88,7 @@ class MarkdownMirror {
     if (Array.isArray(segments) && segments.length > 0) {
       const first = segments[0]?.timestamp || 0;
       const last = segments[segments.length - 1]?.timestamp || first;
-      durationSeconds = Math.max(0, Math.round(last - first));
+      durationSeconds = Math.max(0, Math.round((last - first) / 1000));
     }
 
     let transcriptMd = "";

@@ -13,13 +13,15 @@ function resolveSpeaker(seg, speakerMappings) {
   return "Unknown Speaker";
 }
 
+const MERGE_WINDOW_MS = 2000;
+
 function mergeSegments(segments) {
   const merged = [];
   for (const seg of segments) {
     if (!seg.text?.trim()) continue;
     const ts = seg.timestamp || 0;
     const last = merged[merged.length - 1];
-    if (last && last.speaker === (seg.speaker || "") && ts - last.timestamp < 2) {
+    if (last && last.speaker === (seg.speaker || "") && ts - last.timestamp < MERGE_WINDOW_MS) {
       last.text = last.text + " " + seg.text.trim();
       last.timestamp = ts;
     } else {
@@ -27,6 +29,11 @@ function mergeSegments(segments) {
     }
   }
   return merged;
+}
+
+function elapsedSeconds(seg, startMs) {
+  const ts = seg.timestamp || 0;
+  return Math.max(0, (ts - startMs) / 1000);
 }
 
 function formatTimestamp(seconds) {
@@ -65,13 +72,16 @@ function extractMetadata(note) {
 
 function formatTxt(note, segments, speakerMappings) {
   const merged = mergeSegments(segments);
+  const startMs = merged[0]?.timestamp || 0;
   const { title, dateStr, participants } = extractMetadata(note);
 
   const lines = [title, dateStr];
   if (participants.length) lines.push(`Participants: ${participants.join(", ")}`);
   lines.push("", "──────────────────────────────────", "");
   for (const seg of merged) {
-    lines.push(`[${formatTimestamp(seg.timestamp)}] ${resolveSpeaker(seg, speakerMappings)}:`);
+    lines.push(
+      `[${formatTimestamp(elapsedSeconds(seg, startMs))}] ${resolveSpeaker(seg, speakerMappings)}:`
+    );
     lines.push(seg.text);
     lines.push("");
   }
@@ -80,12 +90,15 @@ function formatTxt(note, segments, speakerMappings) {
 
 function formatSrt(segments, speakerMappings) {
   const merged = mergeSegments(segments);
+  const startMs = merged[0]?.timestamp || 0;
   const entries = [];
   for (let i = 0; i < merged.length; i++) {
     const seg = merged[i];
-    const nextTs = i + 1 < merged.length ? merged[i + 1].timestamp : seg.timestamp + 3;
+    const segElapsed = elapsedSeconds(seg, startMs);
+    const nextElapsed =
+      i + 1 < merged.length ? elapsedSeconds(merged[i + 1], startMs) : segElapsed + 3;
     entries.push(`${i + 1}`);
-    entries.push(`${formatSrtTimestamp(seg.timestamp)} --> ${formatSrtTimestamp(nextTs)}`);
+    entries.push(`${formatSrtTimestamp(segElapsed)} --> ${formatSrtTimestamp(nextElapsed)}`);
     entries.push(`${resolveSpeaker(seg, speakerMappings)}: ${seg.text}`);
     entries.push("");
   }
@@ -94,6 +107,7 @@ function formatSrt(segments, speakerMappings) {
 
 function formatJson(note, segments, speakerMappings) {
   const merged = mergeSegments(segments);
+  const startMs = merged[0]?.timestamp || 0;
   const { title, dateStr } = extractMetadata(note);
 
   const speakersSet = new Set();
@@ -105,14 +119,14 @@ function formatJson(note, segments, speakerMappings) {
       metadata: {
         title,
         date: dateStr,
-        duration_seconds: lastSeg ? Math.round(lastSeg.timestamp) : 0,
+        duration_seconds: lastSeg ? Math.round(elapsedSeconds(lastSeg, startMs)) : 0,
         speaker_count: speakersSet.size,
         segment_count: merged.length,
       },
       speakers: [...speakersSet],
       segments: merged.map((seg) => ({
         speaker: resolveSpeaker(seg, speakerMappings),
-        timestamp: seg.timestamp,
+        timestamp: elapsedSeconds(seg, startMs),
         text: seg.text,
       })),
     },
@@ -123,13 +137,16 @@ function formatJson(note, segments, speakerMappings) {
 
 function formatMd(note, segments, speakerMappings) {
   const merged = mergeSegments(segments);
+  const startMs = merged[0]?.timestamp || 0;
   const { title, dateStr, participants } = extractMetadata(note);
 
   const lines = [`# ${title}`, "", `**Date:** ${dateStr}`];
   if (participants.length) lines.push(`**Participants:** ${participants.join(", ")}`);
   lines.push("", "---", "");
   for (const seg of merged) {
-    lines.push(`**${resolveSpeaker(seg, speakerMappings)}** \`${formatTimestamp(seg.timestamp)}\``);
+    lines.push(
+      `**${resolveSpeaker(seg, speakerMappings)}** \`${formatTimestamp(elapsedSeconds(seg, startMs))}\``
+    );
     lines.push(`${seg.text}`, "");
   }
   return lines.join("\n");
