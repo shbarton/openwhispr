@@ -107,11 +107,12 @@ export default function NoteEditor({ note, cloudEnabled, onDelete, onUpdate }: N
 
   return (
     <div className="flex flex-col h-full min-h-0">
-      <div className="flex items-center justify-between px-5 pt-4 pb-2 gap-3">
+      {/* Meta row: type badge, save status, delete */}
+      <div className="flex items-center justify-between px-6 pt-5 pb-3 gap-3">
         <div className="flex items-center gap-2 min-w-0">
           <span
             className={cn(
-              "shrink-0 text-[10px] font-medium px-1.5 py-px rounded-sm",
+              "shrink-0 text-[10px] font-medium px-1.5 py-0.5 rounded",
               NOTE_TYPE_COLORS[note.note_type]
             )}
           >
@@ -121,7 +122,7 @@ export default function NoteEditor({ note, cloudEnabled, onDelete, onUpdate }: N
         <div className="flex items-center gap-3 shrink-0">
           <span
             className={cn(
-              "text-xs text-muted-foreground/50 transition-opacity duration-300",
+              "text-xs text-foreground-tertiary transition-opacity duration-300",
               saveState === "idle" && "opacity-0",
               saveState === "saving" && "opacity-100",
               saveState === "saved" && "opacity-100"
@@ -139,34 +140,38 @@ export default function NoteEditor({ note, cloudEnabled, onDelete, onUpdate }: N
           <Button
             variant="ghost"
             size="icon"
-            className="h-7 w-7 text-muted-foreground/50 hover:text-destructive hover:bg-destructive/8"
+            className="h-7 w-7 text-foreground-tertiary hover:text-destructive hover:bg-destructive/8"
             onClick={() => setConfirmOpen(true)}
             aria-label={t("noteEditor.deleteNote")}
           >
-            <Trash2 size={13} />
+            <Trash2 size={14} strokeWidth={1.5} />
           </Button>
         </div>
       </div>
 
-      <div className="px-5 pb-2">
-        <input
-          type="text"
-          value={title}
-          onChange={handleTitleChange}
-          placeholder={t("notes.editor.untitled")}
-          className="w-full bg-transparent outline-none border-none text-lg font-medium text-foreground placeholder:text-foreground/20 tracking-[-0.01em]"
-        />
-      </div>
+      {/* Writing surface with comfortable max-width */}
+      <div className="flex-1 overflow-y-auto px-6 pb-8 min-h-0">
+        <div className="max-w-2xl">
+          {/* Title: serif, large, borderless */}
+          <input
+            type="text"
+            value={title}
+            onChange={handleTitleChange}
+            placeholder={t("notes.editor.untitled")}
+            className="w-full bg-transparent outline-none border-none text-2xl text-foreground placeholder:text-foreground-tertiary mb-4"
+            style={{ fontFamily: "var(--font-family-display)" }}
+          />
 
-      <div className="flex-1 overflow-y-auto px-5 pb-6 min-h-0">
-        <textarea
-          ref={textareaRef}
-          value={content}
-          onChange={handleContentChange}
-          placeholder={t("notes.editor.startWriting")}
-          rows={1}
-          className="w-full bg-transparent outline-none border-none resize-none text-sm text-foreground/80 placeholder:text-foreground/20 leading-relaxed"
-        />
+          {/* Body: comfortable reading line-height */}
+          <textarea
+            ref={textareaRef}
+            value={content}
+            onChange={handleContentChange}
+            placeholder={t("notes.editor.startWriting")}
+            rows={1}
+            className="w-full bg-transparent outline-none border-none resize-none text-[15px] text-foreground placeholder:text-foreground-tertiary leading-[1.7]"
+          />
+        </div>
       </div>
 
       <ConfirmDialog

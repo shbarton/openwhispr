@@ -75,17 +75,17 @@ export default function TranscriptionItem({
   return (
     <div
       className={cn(
-        "group rounded-md border px-3 py-2.5 transition-colors duration-150",
+        "group px-1 py-4 transition-colors duration-150",
         isFailed
-          ? "border-destructive/30 bg-destructive/5 hover:bg-destructive/10"
-          : "border-border/40 dark:border-border-subtle/60 bg-card/50 dark:bg-surface-2/60 hover:bg-muted/30 dark:hover:bg-surface-2/80"
+          ? "bg-destructive/4 hover:bg-destructive/8"
+          : "hover:bg-surface-hover"
       )}
       onMouseEnter={() => setIsHovered(true)}
       onMouseLeave={() => setIsHovered(false)}
     >
       <div className="flex items-start gap-3">
         {formattedTime && (
-          <span className="shrink-0 text-[11px] text-muted-foreground tabular-nums pt-0.5">
+          <span className="shrink-0 text-xs text-foreground-tertiary tabular-nums pt-0.5">
             {formattedTime}
           </span>
         )}
@@ -98,12 +98,12 @@ export default function TranscriptionItem({
                 {t("controlPanel.history.transcriptionFailed")}
               </p>
               {item.error_message && (
-                <p className="text-xs text-muted-foreground mt-0.5 truncate">
+                <p className="text-xs text-foreground-muted mt-0.5 truncate">
                   {item.error_message}
                 </p>
               )}
               {isConfigError && (
-                <p className="text-xs text-muted-foreground mt-1">
+                <p className="text-xs text-foreground-muted mt-1">
                   {hasAudio ? (
                     <>
                       <button
@@ -125,19 +125,19 @@ export default function TranscriptionItem({
                 </p>
               )}
               {isLimitError && (
-                <p className="text-xs text-muted-foreground mt-1">
+                <p className="text-xs text-foreground-muted mt-1">
                   {t("controlPanel.history.failedLimitReached")}
                 </p>
               )}
               {isOfflineError && (
-                <p className="text-xs text-muted-foreground mt-1">
+                <p className="text-xs text-foreground-muted mt-1">
                   {t("controlPanel.history.failedOffline")}
                 </p>
               )}
             </div>
           </div>
         ) : (
-          <p className="flex-1 min-w-0 text-foreground text-sm leading-[1.5] break-words">
+          <p className="flex-1 min-w-0 text-foreground text-sm leading-relaxed break-words max-w-[65ch]">
             {item.text}
           </p>
         )}

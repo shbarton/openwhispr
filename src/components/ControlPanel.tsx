@@ -759,17 +759,18 @@ export default function ControlPanel() {
           </div>
           <div className="flex-1 overflow-y-auto pt-1">
             {usage?.isPastDue && activeView === "home" && (
-              <div className="max-w-3xl mx-auto w-full mb-3">
-                <div className="rounded-lg border border-amber-200 dark:border-amber-800 bg-amber-50 dark:bg-amber-950/50 p-3">
+              <div className="max-w-3xl mx-auto w-full mb-3 px-4">
+                <div className="rounded-lg bg-warning/8 dark:bg-warning/12 p-4">
                   <div className="flex items-start gap-3">
-                    <div className="shrink-0 w-8 h-8 rounded-md bg-amber-100 dark:bg-amber-900/50 flex items-center justify-center">
-                      <AlertTriangle size={16} className="text-amber-600 dark:text-amber-400" />
-                    </div>
+                    <AlertTriangle size={18} strokeWidth={1.5} className="shrink-0 text-warning mt-0.5" />
                     <div className="flex-1 min-w-0">
-                      <p className="text-xs font-medium text-amber-900 dark:text-amber-200 mb-0.5">
+                      <p
+                        className="text-sm text-foreground mb-1"
+                        style={{ fontFamily: "var(--font-family-display)" }}
+                      >
                         {t("controlPanel.billing.pastDueTitle")}
                       </p>
-                      <p className="text-xs text-amber-700 dark:text-amber-300/80 mb-2">
+                      <p className="text-xs text-foreground-muted mb-3">
                         {t("controlPanel.billing.bannerDescription", {
                           limit: usage.limit.toLocaleString(),
                         })}
@@ -777,7 +778,7 @@ export default function ControlPanel() {
                       <Button
                         variant="default"
                         size="sm"
-                        className="h-7 text-xs"
+                        className="h-8 text-xs"
                         onClick={() => {
                           setSettingsSection("account");
                           setShowSettings(true);
@@ -793,24 +794,25 @@ export default function ControlPanel() {
             {(gpuAccelAvailable.cuda || gpuAccelAvailable.vulkan) &&
               activeView === "home" &&
               !gpuBannerDismissed && (
-                <div className="max-w-3xl mx-auto w-full mb-3">
-                  <div className="rounded-lg border border-primary/20 dark:border-primary/15 bg-primary/5 p-3">
+                <div className="max-w-3xl mx-auto w-full mb-3 px-4">
+                  <div className="rounded-lg bg-accent-light p-4">
                     <div className="flex items-start gap-3">
-                      <div className="shrink-0 w-8 h-8 rounded-md bg-primary/10 dark:bg-primary/15 flex items-center justify-center">
-                        <Zap size={16} className="text-primary" />
-                      </div>
+                      <Zap size={18} strokeWidth={1.5} className="shrink-0 text-accent mt-0.5" />
                       <div className="flex-1 min-w-0">
-                        <p className="text-xs font-medium text-foreground mb-0.5">
+                        <p
+                          className="text-sm text-foreground mb-1"
+                          style={{ fontFamily: "var(--font-family-display)" }}
+                        >
                           {t("controlPanel.gpu.bannerTitle")}
                         </p>
-                        <p className="text-xs text-muted-foreground mb-2">
+                        <p className="text-xs text-foreground-muted mb-3">
                           {t("controlPanel.gpu.bannerDescription")}
                         </p>
                         <div className="flex items-center gap-3">
                           <Button
                             variant="default"
                             size="sm"
-                            className="h-7 text-xs"
+                            className="h-8 text-xs"
                             onClick={() => {
                               setSettingsSection(
                                 gpuAccelAvailable.cuda ? "transcription" : "intelligence"
@@ -825,7 +827,7 @@ export default function ControlPanel() {
                               setGpuBannerDismissed(true);
                               localStorage.setItem("gpuBannerDismissedUnified", "true");
                             }}
-                            className="text-xs text-muted-foreground hover:text-foreground transition-colors"
+                            className="text-xs text-foreground-muted hover:text-foreground transition-colors duration-150"
                           >
                             {t("controlPanel.gpu.dismissButton")}
                           </button>

@@ -80,7 +80,7 @@ export default function ControlPanelSidebar({
   const navItems: {
     id: ControlPanelView;
     label: string;
-    icon: React.ComponentType<{ size?: number; className?: string }>;
+    icon: React.ComponentType<{ size?: number; strokeWidth?: number; className?: string }>;
   }[] = [
     { id: "home", label: t("sidebar.home"), icon: Home },
     { id: "chat", label: t("sidebar.chat"), icon: MessageSquare },
@@ -91,27 +91,38 @@ export default function ControlPanelSidebar({
   ];
 
   return (
-    <div className="w-48 h-full shrink-0 border-r border-border/15 dark:border-white/6 flex flex-col bg-surface-1/60 dark:bg-surface-1">
+    <div className="w-48 h-full shrink-0 flex flex-col bg-surface-1 dark:bg-surface-1">
       <div
         className="w-full h-10 shrink-0"
         style={{ WebkitAppRegion: "drag" } as React.CSSProperties}
       />
 
+      {/* CalyxVoice brand header */}
+      <div className="flex items-center gap-2.5 px-3 pb-4 pt-1">
+        <div className="w-7 h-7 rounded-md bg-accent-muted dark:bg-surface-hover shrink-0" />
+        <span
+          className="text-lg text-foreground whitespace-nowrap"
+          style={{ fontFamily: "var(--font-family-display)" }}
+        >
+          CalyxVoice
+        </span>
+      </div>
+
       {onOpenSearch && (
-        <div className="px-2 pt-2 pb-1">
+        <div className="px-2 pb-2">
           <button
             onClick={onOpenSearch}
-            className="group flex items-center w-full h-7 px-2.5 rounded-md border border-border/70 dark:border-white/25 bg-transparent hover:bg-foreground/5 dark:hover:bg-white/5 transition-colors gap-2 outline-none focus-visible:ring-1 focus-visible:ring-primary/30"
+            className="group flex items-center w-full h-8 px-2.5 rounded-md bg-transparent hover:bg-surface-hover transition-colors duration-150 gap-2 outline-none focus-visible:ring-1 focus-visible:ring-primary/30"
           >
-            <Search size={11} className="text-muted-foreground/50 shrink-0" />
-            <span className="flex-1 text-[11px] text-left text-muted-foreground/50">
+            <Search size={14} strokeWidth={1.5} className="text-foreground-muted shrink-0" />
+            <span className="flex-1 text-xs text-left text-foreground-muted">
               {t("commandSearch.shortPlaceholder")}
             </span>
             <div className="flex items-center gap-0.5 shrink-0">
-              <kbd className="text-[10px] px-1 py-px rounded border border-border/30 dark:border-white/8 bg-muted/40 text-muted-foreground/40 font-mono leading-tight">
+              <kbd className="text-[10px] px-1 py-px rounded bg-surface-hover text-foreground-tertiary font-mono leading-tight">
                 {platform === "darwin" ? "⌘" : "Ctrl"}
               </kbd>
-              <kbd className="text-[10px] px-1 py-px rounded border border-border/30 dark:border-white/8 bg-muted/40 text-muted-foreground/40 font-mono leading-tight">
+              <kbd className="text-[10px] px-1 py-px rounded bg-surface-hover text-foreground-tertiary font-mono leading-tight">
                 K
               </kbd>
             </div>
@@ -119,7 +130,7 @@ export default function ControlPanelSidebar({
         </div>
       )}
 
-      <nav className="flex flex-col gap-0.5 px-2 pt-2 pb-2">
+      <nav className="flex flex-col gap-0.5 px-2 pt-1 pb-2">
         {navItems.map((item) => {
           const Icon = item.icon;
           const isActive = activeView === item.id;
@@ -129,20 +140,22 @@ export default function ControlPanelSidebar({
               key={item.id}
               onClick={() => onViewChange(item.id)}
               className={cn(
-                "group relative flex items-center gap-2.5 w-full h-8 px-2.5 rounded-md outline-none transition-colors duration-150 text-left",
-                "focus-visible:ring-1 focus-visible:ring-primary/30",
+                "group relative flex items-center gap-2.5 w-full h-8 px-2.5 rounded-md outline-none text-left",
+                "transition-colors duration-150 motion-reduce:transition-none",
+                "focus-visible:ring-1 focus-visible:ring-primary/40",
                 isActive
-                  ? "bg-primary/8 dark:bg-primary/10"
-                  : "hover:bg-foreground/4 dark:hover:bg-white/4 active:bg-foreground/6"
+                  ? "bg-surface-hover"
+                  : "hover:bg-surface-hover"
               )}
             >
               <Icon
-                size={15}
+                size={16}
+                strokeWidth={1.5}
                 className={cn(
                   "shrink-0 transition-colors duration-150",
                   isActive
-                    ? "text-primary"
-                    : "text-foreground/60 group-hover:text-foreground/75 dark:text-foreground/55 dark:group-hover:text-foreground/70"
+                    ? "text-foreground"
+                    : "text-foreground-muted group-hover:text-foreground"
                 )}
               />
               <span
@@ -150,7 +163,7 @@ export default function ControlPanelSidebar({
                   "text-xs transition-colors duration-150",
                   isActive
                     ? "text-foreground font-medium"
-                    : "text-foreground/80 group-hover:text-foreground dark:text-foreground/75 dark:group-hover:text-foreground/90"
+                    : "text-foreground-muted group-hover:text-foreground"
                 )}
               >
                 {item.label}
@@ -164,18 +177,20 @@ export default function ControlPanelSidebar({
 
       {showLimitBanner && (
         <div className="px-2 pb-2">
-          <div className="rounded-lg border border-destructive/25 bg-destructive/5 dark:bg-destructive/10 p-3">
+          <div className="rounded-lg bg-destructive/8 dark:bg-destructive/12 p-3">
             <div className="flex flex-col items-center text-center">
-              <img src={logoIcon} alt="" className="w-7 h-7 rounded-md mb-2" />
-              <p className="text-xs font-medium text-foreground mb-0.5">
+              <p
+                className="text-sm text-foreground mb-1"
+                style={{ fontFamily: "var(--font-family-display)" }}
+              >
                 {t("sidebar.limitReached")}
               </p>
-              <p className="text-[11px] leading-snug text-muted-foreground mb-2.5">
+              <p className="text-[11px] leading-snug text-foreground-muted mb-3">
                 {t("sidebar.limitReachedDescription")}
               </p>
               <button
                 onClick={onUpgrade}
-                className="w-full h-7 rounded-md bg-primary text-primary-foreground text-xs font-medium hover:bg-primary/90 transition-colors"
+                className="w-full h-8 rounded-md bg-primary text-primary-foreground text-xs font-medium hover:bg-primary/90 transition-colors duration-150"
               >
                 {t("sidebar.viewPlans")}
               </button>
@@ -186,28 +201,30 @@ export default function ControlPanelSidebar({
 
       {showUpgradeBanner && (
         <div className="px-2 pb-2">
-          <div className="relative rounded-lg border border-primary/20 bg-primary/5 dark:bg-primary/10 p-3">
+          <div className="relative rounded-lg bg-accent-light p-3">
             <button
               onClick={() => {
                 setUpgradeDismissed(true);
                 localStorage.setItem("upgradeProDismissed", "true");
               }}
               aria-label={t("common.dismiss")}
-              className="absolute top-1.5 right-1.5 p-0.5 rounded-sm text-muted-foreground hover:text-foreground hover:bg-black/5 dark:hover:bg-white/5 transition-colors"
+              className="absolute top-2 right-2 p-1 rounded-md text-foreground-muted hover:text-foreground hover:bg-surface-hover transition-colors duration-150"
             >
-              <X size={12} />
+              <X size={14} strokeWidth={1.5} />
             </button>
-            <div className="flex flex-col items-center text-center pt-1">
-              <img src={logoIcon} alt="" className="w-7 h-7 rounded-md mb-2" />
-              <p className="text-xs font-medium text-foreground mb-0.5">
+            <div className="flex flex-col items-center text-center pt-2">
+              <p
+                className="text-sm text-foreground mb-1"
+                style={{ fontFamily: "var(--font-family-display)" }}
+              >
                 {t("sidebar.upgradeTitle")}
               </p>
-              <p className="text-[11px] leading-snug text-muted-foreground mb-2.5">
+              <p className="text-[11px] leading-snug text-foreground-muted mb-3">
                 {t("sidebar.upgradeDescription")}
               </p>
               <button
                 onClick={onUpgrade}
-                className="w-full h-7 rounded-md bg-primary text-primary-foreground text-xs font-medium hover:bg-primary/90 transition-colors"
+                className="w-full h-8 rounded-md bg-primary text-primary-foreground text-xs font-medium hover:bg-primary/90 transition-colors duration-150"
               >
                 {t("sidebar.learnMore")}
               </button>
@@ -227,13 +244,14 @@ export default function ControlPanelSidebar({
           <button
             onClick={onOpenReferrals}
             aria-label={t("sidebar.referral")}
-            className="group flex items-center gap-2.5 w-full h-8 px-2.5 rounded-md text-left outline-none hover:bg-foreground/4 dark:hover:bg-white/4 focus-visible:ring-1 focus-visible:ring-primary/30 transition-colors duration-150"
+            className="group flex items-center gap-2.5 w-full h-8 px-2.5 rounded-md text-left outline-none hover:bg-surface-hover focus-visible:ring-1 focus-visible:ring-primary/40 transition-colors duration-150 motion-reduce:transition-none"
           >
             <Gift
-              size={15}
-              className="shrink-0 text-foreground/60 group-hover:text-foreground/75 dark:text-foreground/50 dark:group-hover:text-foreground/65 transition-colors duration-150"
+              size={16}
+              strokeWidth={1.5}
+              className="shrink-0 text-foreground-muted group-hover:text-foreground transition-colors duration-150"
             />
-            <span className="text-xs text-foreground/80 group-hover:text-foreground dark:text-foreground/70 dark:group-hover:text-foreground/85 transition-colors duration-150">
+            <span className="text-xs text-foreground-muted group-hover:text-foreground transition-colors duration-150">
               {t("sidebar.referral")}
             </span>
           </button>
@@ -242,13 +260,14 @@ export default function ControlPanelSidebar({
         <button
           onClick={onOpenSettings}
           aria-label={t("sidebar.settings")}
-          className="group flex items-center gap-2.5 w-full h-8 px-2.5 rounded-md text-left outline-none hover:bg-foreground/4 dark:hover:bg-white/4 focus-visible:ring-1 focus-visible:ring-primary/30 transition-colors duration-150"
+          className="group flex items-center gap-2.5 w-full h-8 px-2.5 rounded-md text-left outline-none hover:bg-surface-hover focus-visible:ring-1 focus-visible:ring-primary/40 transition-colors duration-150 motion-reduce:transition-none"
         >
           <Settings
-            size={15}
-            className="shrink-0 text-foreground/60 group-hover:text-foreground/75 dark:text-foreground/50 dark:group-hover:text-foreground/65 transition-colors duration-150"
+            size={16}
+            strokeWidth={1.5}
+            className="shrink-0 text-foreground-muted group-hover:text-foreground transition-colors duration-150"
           />
-          <span className="text-xs text-foreground/80 group-hover:text-foreground dark:text-foreground/70 dark:group-hover:text-foreground/85 transition-colors duration-150">
+          <span className="text-xs text-foreground-muted group-hover:text-foreground transition-colors duration-150">
             {t("sidebar.settings")}
           </span>
         </button>
@@ -257,41 +276,42 @@ export default function ControlPanelSidebar({
           trigger={
             <button
               aria-label={t("sidebar.support")}
-              className="group flex items-center gap-2.5 w-full h-8 px-2.5 rounded-md text-left outline-none hover:bg-foreground/4 dark:hover:bg-white/4 focus-visible:ring-1 focus-visible:ring-primary/30 transition-colors duration-150"
+              className="group flex items-center gap-2.5 w-full h-8 px-2.5 rounded-md text-left outline-none hover:bg-surface-hover focus-visible:ring-1 focus-visible:ring-primary/40 transition-colors duration-150 motion-reduce:transition-none"
             >
               <HelpCircle
-                size={15}
-                className="shrink-0 text-foreground/60 group-hover:text-foreground/75 dark:text-foreground/50 dark:group-hover:text-foreground/65 transition-colors duration-150"
+                size={16}
+                strokeWidth={1.5}
+                className="shrink-0 text-foreground-muted group-hover:text-foreground transition-colors duration-150"
               />
-              <span className="text-xs text-foreground/80 group-hover:text-foreground dark:text-foreground/70 dark:group-hover:text-foreground/85 transition-colors duration-150">
+              <span className="text-xs text-foreground-muted group-hover:text-foreground transition-colors duration-150">
                 {t("sidebar.support")}
               </span>
             </button>
           }
         />
 
-        <div className="mx-1 h-px bg-border/10 dark:bg-white/6 my-1.5!" />
+        <div className="mx-1 h-px bg-border-subtle my-2" />
 
-        <div className="flex items-center gap-2.5 px-2.5 py-1.5 rounded-md">
+        <div className="flex items-center gap-2.5 px-2.5 py-1.5">
           {userImage ? (
             <img src={userImage} alt="" className="w-6 h-6 rounded-full shrink-0 object-cover" />
           ) : (
-            <UserCircle size={18} className="shrink-0 text-foreground/50 dark:text-foreground/45" />
+            <UserCircle size={18} strokeWidth={1.5} className="shrink-0 text-foreground-tertiary" />
           )}
           <div className="flex-1 min-w-0">
             {isSignedIn && (userName || userEmail) ? (
               <>
-                <p className="text-xs text-foreground/80 dark:text-foreground/80 truncate leading-tight">
+                <p className="text-xs text-foreground truncate leading-tight">
                   {userName || t("sidebar.defaultUser")}
                 </p>
                 {userEmail && (
-                  <p className="text-xs text-foreground/55 dark:text-foreground/55 truncate leading-tight">
+                  <p className="text-xs text-foreground-tertiary truncate leading-tight">
                     {userEmail}
                   </p>
                 )}
               </>
             ) : authLoaded && !isSignedIn ? (
-              <p className="text-xs text-foreground/45 dark:text-foreground/55">
+              <p className="text-xs text-foreground-tertiary">
                 {t("sidebar.notSignedIn")}
               </p>
             ) : null}

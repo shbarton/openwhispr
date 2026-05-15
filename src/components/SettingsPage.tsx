@@ -138,9 +138,7 @@ function SettingsPanel({
   className?: string;
 }) {
   return (
-    <div
-      className={`rounded-lg border border-border/50 dark:border-border-subtle/70 bg-card/50 dark:bg-surface-2/50 backdrop-blur-sm divide-y divide-border/30 dark:divide-border-subtle/50 ${className}`}
-    >
+    <div className={`divide-y divide-border-subtle ${className}`}>
       {children}
     </div>
   );
@@ -153,19 +151,22 @@ function SettingsPanelRow({
   children: React.ReactNode;
   className?: string;
 }) {
-  const { isCompact } = useSettingsLayout();
-
   return (
-    <div className={`${isCompact ? "px-3 py-2.5" : "px-4 py-3"} ${className}`}>{children}</div>
+    <div className={`py-5 first:pt-0 ${className}`}>{children}</div>
   );
 }
 
 function SectionHeader({ title, description }: { title: string; description?: string }) {
   return (
-    <div className="mb-3">
-      <h3 className="text-xs font-semibold text-foreground tracking-tight">{title}</h3>
+    <div className="mb-6">
+      <h3
+        className="text-2xl font-normal text-foreground leading-tight"
+        style={{ fontFamily: "var(--font-family-display)" }}
+      >
+        {title}
+      </h3>
       {description && (
-        <p className="text-xs text-muted-foreground/80 mt-0.5 leading-relaxed">{description}</p>
+        <p className="text-sm text-foreground-tertiary mt-1 leading-relaxed">{description}</p>
       )}
     </div>
   );
@@ -3095,7 +3096,7 @@ EOF`,
                   toast={toast}
                 />
 
-                <div className="border-t border-border/40 pt-6">
+                <div className="mt-12 first:mt-0">
                   <SectionHeader
                     title={t("settingsPage.prompts.title")}
                     description={t("settingsPage.prompts.description")}
@@ -3210,7 +3211,7 @@ EOF`,
             </div>
 
             {/* Audio Retention */}
-            <div className="border-t border-border/40 pt-6">
+            <div className="mt-12 first:mt-0">
               <SectionHeader
                 title={t("settingsPage.privacy.audioRetention")}
                 description={t("settingsPage.privacy.audioRetentionDescription")}
@@ -3273,7 +3274,7 @@ EOF`,
             </div>
 
             {/* Data Retention */}
-            <div className="border-t border-border/40 pt-6">
+            <div className="mt-12 first:mt-0">
               <SettingsPanel>
                 <SettingsPanelRow>
                   <SettingsRow
@@ -3287,7 +3288,7 @@ EOF`,
             </div>
 
             {/* Permissions */}
-            <div className="border-t border-border/40 pt-6">
+            <div className="mt-12 first:mt-0">
               <SectionHeader
                 title={t("settingsPage.permissions.title")}
                 description={t("settingsPage.permissions.description")}
@@ -3556,12 +3557,12 @@ EOF`,
             </div>
 
             {/* Developer Tools */}
-            <div className="border-t border-border/40 pt-6">
+            <div className="mt-12 first:mt-0">
               <DeveloperSection />
             </div>
 
             {/* Data Management */}
-            <div className="border-t border-border/40 pt-6">
+            <div className="mt-12 first:mt-0">
               <SectionHeader
                 title={t("settingsPage.developer.dataManagementTitle")}
                 description={t("settingsPage.developer.dataManagementDescription")}

@@ -72,32 +72,33 @@ export default function HistoryView({
     <div className="px-4 pt-4 pb-6">
       <div className={cn("mx-auto", isConnected ? "max-w-5xl" : "max-w-3xl")}>
         {showCloudMigrationBanner && (
-          <div className="mb-3 relative rounded-lg border border-primary/20 bg-primary/5 dark:bg-primary/10 p-3">
+          <div className="mb-4 relative rounded-lg bg-accent-light p-4">
             <button
               onClick={() => {
                 setShowCloudMigrationBanner(false);
                 localStorage.setItem("cloudMigrationShown", "true");
               }}
               aria-label={t("common.close")}
-              className="absolute top-2 right-2 p-1 rounded-sm text-muted-foreground hover:text-foreground hover:bg-black/5 dark:hover:bg-white/5 transition-colors"
+              className="absolute top-3 right-3 p-1 rounded-md text-foreground-muted hover:text-foreground hover:bg-surface-hover transition-colors duration-150"
             >
-              <X size={14} />
+              <X size={14} strokeWidth={1.5} />
             </button>
-            <div className="flex items-start gap-3 pr-6">
-              <div className="shrink-0 w-8 h-8 rounded-md bg-primary/10 dark:bg-primary/20 flex items-center justify-center">
-                <Cloud size={16} className="text-primary" />
-              </div>
+            <div className="flex items-start gap-3 pr-8">
+              <Cloud size={18} strokeWidth={1.5} className="shrink-0 text-accent mt-0.5" />
               <div className="flex-1 min-w-0">
-                <p className="text-xs font-medium text-foreground mb-0.5">
+                <p
+                  className="text-sm text-foreground mb-1"
+                  style={{ fontFamily: "var(--font-family-display)" }}
+                >
                   {t("controlPanel.cloudMigration.title")}
                 </p>
-                <p className="text-xs text-muted-foreground mb-2">
+                <p className="text-xs text-foreground-muted mb-3">
                   {t("controlPanel.cloudMigration.description")}
                 </p>
                 <Button
                   variant="default"
                   size="sm"
-                  className="h-7 text-xs"
+                  className="h-8 text-xs"
                   onClick={() => {
                     setShowCloudMigrationBanner(false);
                     localStorage.setItem("cloudMigrationShown", "true");
@@ -112,32 +113,33 @@ export default function HistoryView({
         )}
 
         {!useCleanupModel && !aiCTADismissed && (
-          <div className="mb-3 relative rounded-lg border border-primary/20 bg-primary/5 dark:bg-primary/10 p-3">
+          <div className="mb-4 relative rounded-lg bg-accent-light p-4">
             <button
               onClick={() => {
                 localStorage.setItem("aiCTADismissed", "true");
                 setAiCTADismissed(true);
               }}
               aria-label={t("common.close")}
-              className="absolute top-2 right-2 p-1 rounded-sm text-muted-foreground hover:text-foreground hover:bg-black/5 dark:hover:bg-white/5 transition-colors"
+              className="absolute top-3 right-3 p-1 rounded-md text-foreground-muted hover:text-foreground hover:bg-surface-hover transition-colors duration-150"
             >
-              <X size={14} />
+              <X size={14} strokeWidth={1.5} />
             </button>
-            <div className="flex items-start gap-3 pr-6">
-              <div className="shrink-0 w-8 h-8 rounded-md bg-primary/10 dark:bg-primary/20 flex items-center justify-center">
-                <Sparkles size={16} className="text-primary" />
-              </div>
+            <div className="flex items-start gap-3 pr-8">
+              <Sparkles size={18} strokeWidth={1.5} className="shrink-0 text-accent mt-0.5" />
               <div className="flex-1 min-w-0">
-                <p className="text-xs font-medium text-foreground mb-0.5">
+                <p
+                  className="text-sm text-foreground mb-1"
+                  style={{ fontFamily: "var(--font-family-display)" }}
+                >
                   {t("controlPanel.aiCta.title")}
                 </p>
-                <p className="text-xs text-muted-foreground mb-2">
+                <p className="text-xs text-foreground-muted mb-3">
                   {t("controlPanel.aiCta.description")}
                 </p>
                 <Button
                   variant="default"
                   size="sm"
-                  className="h-7 text-xs"
+                  className="h-8 text-xs"
                   onClick={() => onOpenSettings("intelligence")}
                 >
                   {t("controlPanel.aiCta.enable")}
@@ -150,146 +152,68 @@ export default function HistoryView({
         <div className={cn(isConnected ? "flex gap-6" : "")}>
           <div className={cn("min-w-0", isConnected ? "flex-1" : "w-full")}>
             {isConnected && (
-              <div className="flex items-center gap-1.5 pb-2.5">
-                <Mic size={12} className="text-muted-foreground" />
-                <span className="text-[11px] font-semibold text-muted-foreground uppercase tracking-wide">
+              <div className="flex items-center gap-2 pb-3 mb-2">
+                <Mic size={14} strokeWidth={1.5} className="text-foreground-tertiary" />
+                <span
+                  className="text-base text-foreground-tertiary"
+                  style={{ fontFamily: "var(--font-family-display)" }}
+                >
                   {t("upcoming.transcriptions")}
                 </span>
               </div>
             )}
             {!dataRetentionEnabled && (
-              <div className="mb-3 rounded-lg border border-amber-500/30 bg-amber-500/5 dark:bg-amber-500/10 px-3.5 py-2.5 flex items-center gap-2.5">
-                <span className="text-amber-600 dark:text-amber-400 shrink-0 text-sm">⊘</span>
-                <p className="text-xs text-amber-700 dark:text-amber-300/90 leading-relaxed">
+              <div className="mb-4 rounded-lg bg-warning/8 dark:bg-warning/12 px-4 py-3 flex items-center gap-3">
+                <span className="text-warning shrink-0 text-sm">⊘</span>
+                <p className="text-xs text-foreground-muted leading-relaxed">
                   {t("controlPanel.history.dataRetentionDisabled")}
                 </p>
               </div>
             )}
             {isLoading ? (
-              <div className="rounded-lg border border-border bg-card/50 dark:bg-card/60 backdrop-blur-sm">
-                <div className="flex items-center justify-center gap-2 py-8">
-                  <Loader2 size={14} className="animate-spin text-primary" />
-                  <span className="text-sm text-muted-foreground">{t("controlPanel.loading")}</span>
-                </div>
+              <div className="flex items-center justify-center gap-2 py-16">
+                <Loader2 size={16} className="animate-spin text-accent" />
+                <span className="text-sm text-foreground-muted">{t("controlPanel.loading")}</span>
               </div>
             ) : history.length === 0 ? (
-              <div className="rounded-lg border border-border bg-card/50 dark:bg-card/60 backdrop-blur-sm">
-                <div className="flex flex-col items-center justify-center py-16 px-4">
-                  <svg
-                    className="text-foreground dark:text-white mb-5"
-                    width="64"
-                    height="64"
-                    viewBox="0 0 64 64"
-                    fill="none"
-                  >
-                    <rect
-                      x="24"
-                      y="6"
-                      width="16"
-                      height="28"
-                      rx="8"
-                      fill="currentColor"
-                      fillOpacity={0.04}
-                      stroke="currentColor"
-                      strokeOpacity={0.1}
-                    />
-                    <rect
-                      x="28"
-                      y="12"
-                      width="8"
-                      height="3"
-                      rx="1.5"
-                      fill="currentColor"
-                      fillOpacity={0.06}
-                    />
-                    <path
-                      d="M18 28c0 7.7 6.3 14 14 14s14-6.3 14-14"
-                      fill="none"
-                      stroke="currentColor"
-                      strokeOpacity={0.07}
-                      strokeWidth={1.5}
-                      strokeLinecap="round"
-                    />
-                    <line
-                      x1="32"
-                      y1="42"
-                      x2="32"
-                      y2="50"
-                      stroke="currentColor"
-                      strokeOpacity={0.07}
-                      strokeWidth={1.5}
-                      strokeLinecap="round"
-                    />
-                    <line
-                      x1="26"
-                      y1="50"
-                      x2="38"
-                      y2="50"
-                      stroke="currentColor"
-                      strokeOpacity={0.07}
-                      strokeWidth={1.5}
-                      strokeLinecap="round"
-                    />
-                    <path
-                      d="M12 20a2 2 0 0 1 0 8"
-                      stroke="currentColor"
-                      strokeOpacity={0.04}
-                      strokeWidth={1.5}
-                      strokeLinecap="round"
-                    />
-                    <path
-                      d="M8 18a2 2 0 0 1 0 12"
-                      stroke="currentColor"
-                      strokeOpacity={0.03}
-                      strokeWidth={1.5}
-                      strokeLinecap="round"
-                    />
-                    <path
-                      d="M52 20a2 2 0 0 0 0 8"
-                      stroke="currentColor"
-                      strokeOpacity={0.04}
-                      strokeWidth={1.5}
-                      strokeLinecap="round"
-                    />
-                    <path
-                      d="M56 18a2 2 0 0 0 0 12"
-                      stroke="currentColor"
-                      strokeOpacity={0.03}
-                      strokeWidth={1.5}
-                      strokeLinecap="round"
-                    />
-                  </svg>
-                  <h3 className="text-xs font-semibold text-foreground/70 dark:text-foreground/60 mb-2">
-                    {t("controlPanel.history.empty")}
-                  </h3>
-                  <div className="flex items-center gap-2 text-xs text-foreground/50 dark:text-foreground/25">
-                    <span>{t("controlPanel.history.press")}</span>
-                    <kbd className="inline-flex items-center h-5 px-1.5 rounded-sm bg-surface-1 dark:bg-white/6 border border-border/50 text-xs font-mono font-medium text-foreground/60 dark:text-foreground/40">
-                      {formatHotkeyLabel(hotkey)}
-                    </kbd>
-                    <span>{t("controlPanel.history.toStart")}</span>
-                  </div>
+              <div className="flex flex-col items-center justify-center py-24 px-4">
+                <Mic size={48} strokeWidth={1} className="text-foreground-tertiary mb-6 opacity-40" />
+                <h3
+                  className="text-xl text-foreground mb-2"
+                  style={{ fontFamily: "var(--font-family-display)" }}
+                >
+                  {t("controlPanel.history.empty")}
+                </h3>
+                <div className="flex items-center gap-2 text-sm text-foreground-tertiary">
+                  <span>{t("controlPanel.history.press")}</span>
+                  <kbd className="inline-flex items-center h-6 px-2 rounded bg-surface-hover text-sm font-mono text-foreground-muted">
+                    {formatHotkeyLabel(hotkey)}
+                  </kbd>
+                  <span>{t("controlPanel.history.toStart")}</span>
                 </div>
               </div>
             ) : (
               <div className="group">
                 {groupedHistory.map((group, index) => (
-                  <div key={group.label} className={index > 0 ? "mt-4" : ""}>
-                    <div className="sticky -top-1 z-10 -mx-4 px-5 pt-2 pb-2 bg-background flex items-center justify-between">
-                      <span className="text-[11px] font-semibold text-muted-foreground dark:text-muted-foreground uppercase tracking-wide">
+                  <div key={group.label} className={index > 0 ? "mt-8" : ""}>
+                    <div className="sticky -top-1 z-10 -mx-4 px-5 pt-3 pb-3 bg-background flex items-center justify-between">
+                      <span
+                        className="text-base text-foreground-tertiary"
+                        style={{ fontFamily: "var(--font-family-display)" }}
+                      >
                         {group.label}
                       </span>
                       {index === 0 && (
                         <button
                           onClick={clearAllTranscriptions}
-                          className="flex items-center gap-1 px-1.5 py-0.5 rounded text-[11px] text-muted-foreground/60 opacity-0 group-hover:opacity-100 hover:!text-destructive hover:!bg-destructive/8 dark:hover:!bg-destructive/10 active:scale-[0.98] focus-visible:opacity-100 focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring/30 transition-all duration-200"
+                          className="flex items-center gap-1.5 px-2 py-1 rounded-md text-xs text-foreground-tertiary opacity-0 group-hover:opacity-100 hover:text-destructive hover:bg-destructive/8 dark:hover:bg-destructive/10 active:scale-[0.98] focus-visible:opacity-100 focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-primary/40 transition-all duration-150"
                         >
-                          <Trash2 size={11} />
+                          <Trash2 size={12} strokeWidth={1.5} />
                           <span>{t("controlPanel.history.clearAll")}</span>
                         </button>
                       )}
                     </div>
-                    <div className="space-y-1.5 relative z-0">
+                    <div className="divide-y divide-border-subtle">
                       {group.items.map((item) => (
                         <TranscriptionItem
                           key={item.id}
