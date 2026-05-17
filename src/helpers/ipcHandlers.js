@@ -5945,22 +5945,19 @@ class IPCHandlers {
           throw new Error("cli-agent-stream-start: streamId is required");
         }
         try {
-          // Construct hardened backend config from renderer-supplied config.
-          // We do NOT trust the renderer to set permissionMode / allowedTools
-          // safely; we enforce the V1 allowlist HERE in the main process.
-          //
-          // Tool allowlist (Codex point #3/#4, Gemini point #1):
-          //   Read mode: Read, Glob, Grep
-          //   Edit mode: + Write, Edit
-          //   NEVER Bash, NEVER bypassPermissions in V1
-          const editMode = config?.editMode === true;
-          const allowedTools = editMode
-            ? ["Read", "Glob", "Grep", "Write", "Edit"]
-            : ["Read", "Glob", "Grep"];
+          // Permission / tool defaults per user request 2026-05-17:
+          // bypass permissions by default, allow the full main toolkit. Bash
+          // is still blocked because the transcript is untrusted input and
+          // an injection that gets Bash would be the worst-case break. The
+          // renderer can flip `readOnly` to constrain back to Read/Glob/Grep.
+          const readOnly = config?.readOnly === true;
+          const allowedTools = readOnly
+            ? ["Read", "Glob", "Grep"]
+            : ["Read", "Glob", "Grep", "Write", "Edit"];
           const backendConfig = {
             model: config?.model || undefined,
             systemPrompt: systemPrompt || "",
-            permissionMode: editMode ? "acceptEdits" : "plan",
+            permissionMode: readOnly ? "plan" : "bypassPermissions",
             allowedTools,
             disallowedTools: ["Bash"],
             workspaceRoot: config?.workspaceRoot || undefined,

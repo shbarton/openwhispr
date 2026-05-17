@@ -1476,7 +1476,8 @@ declare global {
           model?: string;
           workspaceRoot?: string;
           cliPath?: string;
-          editMode?: boolean;
+          /** If true, restrict to Read/Glob/Grep + plan permission mode. */
+          readOnly?: boolean;
           addDirs?: string[];
         };
         sessionId?: string;

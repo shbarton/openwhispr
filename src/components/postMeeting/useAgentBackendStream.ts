@@ -18,8 +18,11 @@ interface UseAgentBackendStreamOptions {
   vaultPath: string;
   model?: string;
   cliPath?: string;
-  /** Edit mode = adds Write/Edit to the tool allowlist, switches to acceptEdits. */
-  editMode: boolean;
+  /**
+   * If true, restrict the agent to Read/Glob/Grep + plan permission mode.
+   * Default is the full toolkit with bypassPermissions.
+   */
+  readOnly: boolean;
   /** Additional directories the agent is allowed to read (forwarded as --add-dir). */
   addDirs?: string[];
 }
@@ -293,7 +296,7 @@ export function useAgentBackendStream(
           model: cfg.model,
           workspaceRoot: cfg.vaultPath || undefined,
           cliPath: cfg.cliPath,
-          editMode: cfg.editMode,
+          readOnly: cfg.readOnly,
           addDirs: cfg.addDirs,
         },
         sessionId: sessionIdRef.current || undefined,
