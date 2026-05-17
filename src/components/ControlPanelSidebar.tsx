@@ -14,6 +14,7 @@ import {
   Search,
 } from "lucide-react";
 import logoIcon from "../assets/icon.png";
+import calyxVoiceLogo from "../assets/calyxvoice-logo.png";
 import { useTranslation } from "react-i18next";
 import { cn } from "./lib/utils";
 import SupportDropdown from "./ui/SupportDropdown";
@@ -99,7 +100,11 @@ export default function ControlPanelSidebar({
 
       {/* CalyxVoice brand header */}
       <div className="flex items-center gap-2.5 px-3 pb-4 pt-1">
-        <div className="w-7 h-7 rounded-md bg-accent-muted dark:bg-surface-hover shrink-0" />
+        <img
+          src={calyxVoiceLogo}
+          alt="CalyxVoice"
+          className="w-7 h-7 rounded-md shrink-0 object-contain"
+        />
         <span
           className="text-lg text-foreground whitespace-nowrap"
           style={{ fontFamily: "var(--font-family-display)" }}
