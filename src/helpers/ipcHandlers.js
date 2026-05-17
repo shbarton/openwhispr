@@ -5803,6 +5803,57 @@ class IPCHandlers {
     // CLI Agent (post-meeting Claude subprocess)
     // ─────────────────────────────────────────────────────────────────────
     //
+    // Persist the meeting transcript to disk so the agent can Read it instead
+    // of stuffing the whole blob into the first message. Returns the absolute
+    // file path and the directory that needs to be added to the agent's
+    // allowlist via --add-dir.
+    ipcMain.handle(
+      "cli-agent-prepare-meeting",
+      async (_event, { noteId, transcript } = {}) => {
+        try {
+          if (!transcript || typeof transcript !== "string") {
+            throw new Error("transcript is required");
+          }
+          const baseDir = path.join(
+            app.getPath("userData"),
+            "agent-transcripts"
+          );
+          await fs.promises.mkdir(baseDir, { recursive: true });
+          const safeId = String(noteId || "untitled").replace(
+            /[^a-zA-Z0-9_-]/g,
+            "_"
+          );
+          const stamp = new Date().toISOString().replace(/[:.]/g, "-");
+          const fileName = `meeting-${safeId}-${stamp}.txt`;
+          const filePath = path.join(baseDir, fileName);
+          await fs.promises.writeFile(filePath, transcript, "utf-8");
+
+          // Best-effort: prune old transcripts (keep most-recent 50)
+          try {
+            const entries = await fs.promises.readdir(baseDir);
+            const stats = await Promise.all(
+              entries.map(async (name) => {
+                const p = path.join(baseDir, name);
+                const st = await fs.promises.stat(p);
+                return { p, mtime: st.mtimeMs };
+              })
+            );
+            stats.sort((a, b) => b.mtime - a.mtime);
+            for (const old of stats.slice(50)) {
+              fs.promises.unlink(old.p).catch(() => {});
+            }
+          } catch {
+            // ignore prune failures
+          }
+
+          return { ok: true, path: filePath, addDir: baseDir };
+        } catch (error) {
+          debugLogger.error("CLI agent prepare-meeting error:", error);
+          return { ok: false, error: error.message };
+        }
+      }
+    );
+
     // Preflight: validate binary, version, auth, and vault path. Renderer calls
     // this before offering a "Start AI assistant" button.
     ipcMain.handle("cli-agent-preflight", async (_event, opts = {}) => {
@@ -5914,6 +5965,9 @@ class IPCHandlers {
             disallowedTools: ["Bash"],
             workspaceRoot: config?.workspaceRoot || undefined,
             cliPath: config?.cliPath || undefined,
+            // Extra directories the agent is allowed to read from (e.g. the
+            // transcript file under userData). Forwarded as --add-dir.
+            addDirs: Array.isArray(config?.addDirs) ? config.addDirs : [],
           };
 
           const backend = await agentBackendManager.start(

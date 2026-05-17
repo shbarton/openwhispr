@@ -20,6 +20,8 @@ interface UseAgentBackendStreamOptions {
   cliPath?: string;
   /** Edit mode = adds Write/Edit to the tool allowlist, switches to acceptEdits. */
   editMode: boolean;
+  /** Additional directories the agent is allowed to read (forwarded as --add-dir). */
+  addDirs?: string[];
 }
 
 interface UseAgentBackendStreamResult {
@@ -292,6 +294,7 @@ export function useAgentBackendStream(
           workspaceRoot: cfg.vaultPath || undefined,
           cliPath: cfg.cliPath,
           editMode: cfg.editMode,
+          addDirs: cfg.addDirs,
         },
         sessionId: sessionIdRef.current || undefined,
       });

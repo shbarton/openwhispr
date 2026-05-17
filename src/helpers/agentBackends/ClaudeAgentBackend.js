@@ -202,6 +202,13 @@ class ClaudeAgentBackend {
       args.push("--disallowedTools", ...disallowedTools);
     }
 
+    // Extra directories the agent may read/operate in. Used by the
+    // post-meeting flow to expose the transcript file (which lives under
+    // app userData, outside the vault cwd) without widening cwd itself.
+    if (Array.isArray(this.config.addDirs) && this.config.addDirs.length > 0) {
+      args.push("--add-dir", ...this.config.addDirs);
+    }
+
     // Build environment — extend PATH to ensure claude is findable
     // Build environment via allowlist (Codex review point #5).
     // We do NOT inherit the full process.env — that would leak unrelated

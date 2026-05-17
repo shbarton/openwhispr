@@ -20,6 +20,8 @@ import { useEffect, useMemo, useState } from "react";
 import { ArrowLeft, Mic2 } from "lucide-react";
 import type { NoteItem } from "../../types/electron";
 import { useActiveNoteId, useNotes } from "../../stores/noteStore";
+import { parseTranscriptSegments } from "../../utils/parseTranscriptSegments";
+import type { TranscriptSegment } from "../../stores/meetingRecordingStore";
 import AgentChatPanel from "./AgentChatPanel";
 import SpeakerSelectionPlaceholder from "./SpeakerSelectionPlaceholder";
 
@@ -40,10 +42,64 @@ function formatDate(iso: string | undefined): string {
   }
 }
 
-function transcriptPlainText(note: NoteItem | null): string {
-  if (!note) return "";
-  // Prefer the dedicated transcript field; fall back to content.
-  return (note.transcript || note.content || "").trim();
+function formatTimestamp(ms: number | undefined): string {
+  if (!ms || !Number.isFinite(ms)) return "";
+  try {
+    return new Date(ms).toLocaleTimeString(undefined, {
+      hour: "2-digit",
+      minute: "2-digit",
+    });
+  } catch {
+    return "";
+  }
+}
+
+function speakerLabel(s: TranscriptSegment): string {
+  if (s.speakerName) return s.speakerName;
+  if (s.speaker) return s.speaker.replace(/_/g, " ");
+  return s.source === "mic" ? "Me" : "Other";
+}
+
+function formatSegments(segments: TranscriptSegment[]): string {
+  return segments
+    .map((s) => {
+      const ts = formatTimestamp(s.timestamp);
+      const who = speakerLabel(s);
+      const tsPart = ts ? `[${ts}] ` : "";
+      return `${tsPart}${who}: ${(s.text || "").trim()}`;
+    })
+    .filter((line) => line.trim().length > 0)
+    .join("\n");
+}
+
+interface ParsedTranscript {
+  segments: TranscriptSegment[];
+  /** Human-readable plain text, one line per segment. */
+  text: string;
+  /** Whether the source data was structured segments (vs. plain text fallback). */
+  isStructured: boolean;
+}
+
+function transcriptForNote(note: NoteItem | null): ParsedTranscript {
+  if (!note) return { segments: [], text: "", isStructured: false };
+
+  // If the transcript field starts with "[", it's JSON segments — parse it.
+  const raw = (note.transcript || "").trim();
+  if (raw.startsWith("[")) {
+    const segments = parseTranscriptSegments(raw);
+    if (segments.length > 0) {
+      return {
+        segments,
+        text: formatSegments(segments),
+        isStructured: true,
+      };
+    }
+  }
+
+  // Fallback: enhanced_content → content → raw transcript string.
+  const fallback =
+    (note.enhanced_content || note.content || raw || "").trim();
+  return { segments: [], text: fallback, isStructured: false };
 }
 
 export default function PostMeetingView({ onClose }: PostMeetingViewProps) {
@@ -72,7 +128,8 @@ export default function PostMeetingView({ onClose }: PostMeetingViewProps) {
     };
   }, [activeNoteId, storedNote]);
 
-  const transcript = useMemo(() => transcriptPlainText(note), [note]);
+  const parsedTranscript = useMemo(() => transcriptForNote(note), [note]);
+  const transcript = parsedTranscript.text;
 
   // Empty state ─ no note selected (e.g. user clicked sidebar tab with nothing recent)
   if (!note) {
@@ -127,11 +184,51 @@ export default function PostMeetingView({ onClose }: PostMeetingViewProps) {
       <div className="flex-1 min-h-0 grid grid-cols-1 lg:grid-cols-[1fr_1fr] gap-4 p-4 overflow-hidden">
         {/* Left: transcript */}
         <div className="flex flex-col h-full min-h-0 border border-border rounded-lg bg-surface-1 dark:bg-surface-2 overflow-hidden">
-          <div className="px-4 py-2 border-b border-border bg-surface-2/40 dark:bg-surface-3/30">
+          <div className="px-4 py-2 border-b border-border bg-surface-2/40 dark:bg-surface-3/30 flex items-center justify-between">
             <h3 className="text-sm font-medium">Transcript</h3>
+            {parsedTranscript.isStructured && (
+              <span className="text-[10px] text-foreground-muted">
+                {parsedTranscript.segments.length} segments
+              </span>
+            )}
           </div>
-          <div className="flex-1 min-h-0 overflow-y-auto p-4 text-sm whitespace-pre-wrap font-mono leading-relaxed text-foreground/90">
-            {transcript || (
+          <div className="flex-1 min-h-0 overflow-y-auto p-4 text-sm leading-relaxed">
+            {parsedTranscript.isStructured &&
+            parsedTranscript.segments.length > 0 ? (
+              <div className="flex flex-col gap-2">
+                {parsedTranscript.segments.map((s, idx) => {
+                  const ts = formatTimestamp(s.timestamp);
+                  const who = speakerLabel(s);
+                  const isMic = s.source === "mic";
+                  return (
+                    <div
+                      key={s.id || idx}
+                      className="flex flex-col gap-0.5 break-words"
+                    >
+                      <div className="flex items-center gap-2 text-[10px] uppercase tracking-wide text-foreground-muted">
+                        <span
+                          className={
+                            isMic
+                              ? "text-primary font-medium"
+                              : "text-accent font-medium"
+                          }
+                        >
+                          {who}
+                        </span>
+                        {ts && <span>{ts}</span>}
+                      </div>
+                      <div className="text-foreground/90 whitespace-pre-wrap break-words">
+                        {s.text}
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            ) : transcript ? (
+              <div className="whitespace-pre-wrap break-words text-foreground/90 font-mono text-[13px]">
+                {transcript}
+              </div>
+            ) : (
               <span className="text-foreground-muted italic">
                 No transcript captured for this meeting.
               </span>
@@ -145,6 +242,7 @@ export default function PostMeetingView({ onClose }: PostMeetingViewProps) {
           meetingDate={note.created_at}
           transcript={transcript}
           meetingNoteSlug={note.client_note_id || `note-${note.id}`}
+          noteId={note.id}
         />
       </div>
 

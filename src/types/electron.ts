@@ -1456,6 +1456,13 @@ declare global {
       onAgentStreamEnd?: (callback: () => void) => () => void;
 
       // CLI Agent (post-meeting Claude subprocess)
+      cliAgentPrepareMeeting?: (payload: {
+        noteId?: number | string;
+        transcript: string;
+      }) => Promise<
+        | { ok: true; path: string; addDir: string }
+        | { ok: false; error: string }
+      >;
       cliAgentPreflight?: (opts: {
         vaultPath?: string;
         agentCliPath?: string;
@@ -1470,6 +1477,7 @@ declare global {
           workspaceRoot?: string;
           cliPath?: string;
           editMode?: boolean;
+          addDirs?: string[];
         };
         sessionId?: string;
       }) => Promise<{ ok: boolean; streamId?: string; error?: string }>;
