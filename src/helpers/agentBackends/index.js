@@ -45,20 +45,31 @@ class AgentBackendManager {
     }
 
     const backend = new ClaudeAgentBackend();
-    if (sessionId) {
-      await backend.resume(sessionId, config);
-    } else {
-      await backend.start(config);
+    try {
+      if (sessionId) {
+        await backend.resume(sessionId, config);
+      } else {
+        await backend.start(config);
+      }
+
+      this.activeStreams.set(streamId, {
+        backend,
+        sessionId: sessionId || null,
+      });
+
+      await backend.send({ content: prompt });
+      return backend;
+    } catch (err) {
+      // Gemini point #3: if start/resume/send throws, don't leak the streamId
+      // into activeStreams (would block future starts with the same id).
+      this.activeStreams.delete(streamId);
+      try {
+        await backend.close();
+      } catch {
+        // best-effort
+      }
+      throw err;
     }
-
-    this.activeStreams.set(streamId, {
-      backend,
-      sessionId: sessionId || null,
-    });
-
-    await backend.send({ content: prompt });
-
-    return backend;
   }
 
   /**

@@ -103,6 +103,12 @@ export function useAgentBackendStream(
     );
 
     return () => {
+      // Cancel any in-flight subprocess (Gemini point #2: otherwise the CLI
+      // process keeps running until app quit if the user navigates away).
+      const liveId = currentStreamIdRef.current;
+      if (liveId && api.cliAgentStreamCancel) {
+        api.cliAgentStreamCancel(liveId).catch(() => {});
+      }
       unsubEvent?.();
       unsubEnd?.();
       unsubError?.();
@@ -128,14 +134,19 @@ export function useAgentBackendStream(
         break;
       }
       case "text_end": {
+        // Gemini point #4: don't override the accumulated text with
+        // event.content. The backend may emit multiple text_end events:
+        //   - one at message_stop with the running `currentTextContent`
+        //   - and another from `_raw_assistant` if the final assistant
+        //     message differs from the streamed content.
+        // Treating each event as "replace assistant content with X" causes
+        // visible flicker / wipe when the second event is shorter or
+        // structured differently. Trust the accumulator we built from
+        // `text` chunks; just mark streaming as done.
         const id = currentAssistantIdRef.current;
         if (id) {
           setMessages((prev) =>
-            prev.map((m) =>
-              m.id === id
-                ? { ...m, content: event.content, isStreaming: false }
-                : m
-            )
+            prev.map((m) => (m.id === id ? { ...m, isStreaming: false } : m))
           );
         }
         break;

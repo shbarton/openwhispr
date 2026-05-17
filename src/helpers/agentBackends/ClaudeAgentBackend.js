@@ -165,15 +165,41 @@ class ClaudeAgentBackend {
       }
     }
 
-    // Allowed tools for MCP servers
+    // Tool allowlist. The caller may supply an explicit list (V1 hardening from
+    // Codex/Gemini review point #1 — without this, "Edit mode" would have
+    // effectively unrestricted tool access including Bash). MCP server tools
+    // are still merged in.
+    const allowedTools = [];
+    if (Array.isArray(this.config.allowedTools)) {
+      allowedTools.push(...this.config.allowedTools);
+    }
     if (
       this.config.mcpServers &&
       Object.keys(this.config.mcpServers).length > 0
     ) {
-      const mcpToolPatterns = Object.keys(this.config.mcpServers).map(
-        (serverName) => `mcp__${serverName}__*`
-      );
-      args.push("--allowedTools", ...mcpToolPatterns);
+      for (const serverName of Object.keys(this.config.mcpServers)) {
+        allowedTools.push(`mcp__${serverName}__*`);
+      }
+    }
+    if (allowedTools.length > 0) {
+      args.push("--allowedTools", ...allowedTools);
+    }
+
+    // Disallow list — belt and suspenders for Bash and other dangerous tools
+    // we never want the post-meeting agent to touch. If the caller passes
+    // disallowedTools, prefer that; otherwise default to blocking Bash unless
+    // it was explicitly allowed above.
+    const disallowedTools = Array.isArray(this.config.disallowedTools)
+      ? [...this.config.disallowedTools]
+      : [];
+    if (
+      !disallowedTools.includes("Bash") &&
+      !allowedTools.includes("Bash")
+    ) {
+      disallowedTools.push("Bash");
+    }
+    if (disallowedTools.length > 0) {
+      args.push("--disallowedTools", ...disallowedTools);
     }
 
     // Build environment — extend PATH to ensure claude is findable

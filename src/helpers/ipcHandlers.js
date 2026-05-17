@@ -5896,22 +5896,24 @@ class IPCHandlers {
         try {
           // Construct hardened backend config from renderer-supplied config.
           // We do NOT trust the renderer to set permissionMode / allowedTools
-          // safely; we enforce the V1 allowlist here.
+          // safely; we enforce the V1 allowlist HERE in the main process.
+          //
+          // Tool allowlist (Codex point #3/#4, Gemini point #1):
+          //   Read mode: Read, Glob, Grep
+          //   Edit mode: + Write, Edit
+          //   NEVER Bash, NEVER bypassPermissions in V1
           const editMode = config?.editMode === true;
+          const allowedTools = editMode
+            ? ["Read", "Glob", "Grep", "Write", "Edit"]
+            : ["Read", "Glob", "Grep"];
           const backendConfig = {
             model: config?.model || undefined,
             systemPrompt: systemPrompt || "",
             permissionMode: editMode ? "acceptEdits" : "plan",
-            // V1 tool allowlist (Codex point #3/#4):
-            //   Read mode: Read, Glob, Grep
-            //   Edit mode: + Write, Edit
-            //   NEVER Bash, NEVER bypassPermissions
+            allowedTools,
+            disallowedTools: ["Bash"],
             workspaceRoot: config?.workspaceRoot || undefined,
             cliPath: config?.cliPath || undefined,
-            // Note: ClaudeAgentBackend's start() doesn't currently honor a
-            // tools field directly — it passes them via --allowedTools when
-            // mcpServers is set. For V1 we'll rely on permissionMode=plan to
-            // prevent Write/Edit, and document edit mode as opt-in.
           };
 
           const backend = await agentBackendManager.start(
