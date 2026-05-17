@@ -745,6 +745,25 @@ contextBridge.exposeInMainWorld("electronAPI", {
   ),
   onAgentStreamEnd: registerListener("cloud-agent-stream-end", (callback) => () => callback()),
 
+  // CLI Agent (post-meeting Claude subprocess)
+  cliAgentPreflight: (opts) => ipcRenderer.invoke("cli-agent-preflight", opts),
+  cliAgentStreamStart: (payload) =>
+    ipcRenderer.invoke("cli-agent-stream-start", payload),
+  cliAgentStreamCancel: (streamId) =>
+    ipcRenderer.invoke("cli-agent-stream-cancel", { streamId }),
+  onCliAgentStreamEvent: registerListener(
+    "cli-agent-stream-event",
+    (callback) => (_event, payload) => callback(payload)
+  ),
+  onCliAgentStreamEnd: registerListener(
+    "cli-agent-stream-end",
+    (callback) => (_event, payload) => callback(payload)
+  ),
+  onCliAgentStreamError: registerListener(
+    "cli-agent-stream-error",
+    (callback) => (_event, payload) => callback(payload)
+  ),
+
   // Agent cloud tools
   agentWebSearch: (query, numResults) => ipcRenderer.invoke("agent-web-search", query, numResults),
   agentOpenNote: (noteId) => ipcRenderer.invoke("agent-open-note", noteId),

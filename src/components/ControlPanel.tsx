@@ -53,6 +53,7 @@ const UploadAudioView = React.lazy(() => import("./notes/UploadAudioView"));
 const IntegrationsView = React.lazy(() => import("./IntegrationsView"));
 const ChatView = React.lazy(() => import("./chat/ChatView"));
 const CommandSearch = React.lazy(() => import("./CommandSearch"));
+const PostMeetingView = React.lazy(() => import("./postMeeting/PostMeetingView"));
 
 export default function ControlPanel() {
   const { t } = useTranslation();
@@ -78,6 +79,28 @@ export default function ControlPanel() {
     isMeetingMode || (isNarrowWindow && activeView === "personal-notes" && activeNoteId != null);
   const recordingNoteId = useMeetingRecordingStore((s) => s.recordingNoteId);
   const recordingFolderId = useMeetingRecordingStore((s) => s.recordingFolderId);
+  const isRecording = useMeetingRecordingStore((s) => s.isRecording);
+  const isTranscribing = useMeetingRecordingStore((s) => s.isTranscribing);
+  const agentAutoNavOnStopRef = React.useRef(false);
+
+  // Auto-navigate to the post-meeting view when a recording session ends.
+  // We arm the trigger when recording starts, then fire once when both
+  // isRecording and isTranscribing go false. Manual navigation via the
+  // sidebar is always available; this just covers the "I just hit stop" case.
+  React.useEffect(() => {
+    if (isRecording) {
+      agentAutoNavOnStopRef.current = true;
+      return;
+    }
+    if (!isRecording && !isTranscribing && agentAutoNavOnStopRef.current) {
+      agentAutoNavOnStopRef.current = false;
+      const noteIdAtStop = recordingNoteId;
+      if (noteIdAtStop != null) {
+        setActiveNoteId(noteIdAtStop);
+        setActiveView("post-meeting");
+      }
+    }
+  }, [isRecording, isTranscribing, recordingNoteId]);
   const [meetingRecordingRequest, setMeetingRecordingRequest] = useState<{
     noteId: number;
     folderId: number;
@@ -873,6 +896,13 @@ export default function ControlPanel() {
                   onOpenSearch={() => setShowSearch(true)}
                   meetingRecordingRequest={meetingRecordingRequest}
                   onMeetingRecordingRequestHandled={handleMeetingRecordingRequestHandled}
+                />
+              </Suspense>
+            )}
+            {activeView === "post-meeting" && (
+              <Suspense fallback={null}>
+                <PostMeetingView
+                  onClose={() => setActiveView("personal-notes")}
                 />
               </Suspense>
             )}

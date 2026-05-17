@@ -12,6 +12,7 @@ import {
   UserCircle,
   X,
   Search,
+  Sparkles,
 } from "lucide-react";
 import logoIcon from "../assets/icon.png";
 import calyxVoiceLogo from "../assets/calyxvoice-logo.png";
@@ -26,6 +27,7 @@ export type ControlPanelView =
   | "home"
   | "chat"
   | "personal-notes"
+  | "post-meeting"
   | "dictionary"
   | "upload"
   | "integrations";
@@ -86,6 +88,11 @@ export default function ControlPanelSidebar({
     { id: "home", label: t("sidebar.home"), icon: Home },
     { id: "chat", label: t("sidebar.chat"), icon: MessageSquare },
     { id: "personal-notes", label: t("sidebar.notes"), icon: NotebookPen },
+    {
+      id: "post-meeting",
+      label: t("sidebar.postMeeting", "Post Meeting"),
+      icon: Sparkles,
+    },
     { id: "upload", label: t("sidebar.upload"), icon: Upload },
     { id: "dictionary", label: t("sidebar.dictionary"), icon: BookOpen },
     { id: "integrations", label: t("sidebar.integrations"), icon: Blocks },

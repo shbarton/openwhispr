@@ -36,6 +36,12 @@ const {
 } = require("../constants/speakerDetection.json");
 const modelRegistryData = require("../models/modelRegistryData.json");
 const { VaultMetadataProvider } = require("./vaultMetadata");
+const { agentBackendManager } = require("./agentBackends");
+const {
+  getClaudePath,
+  getClaudeVersion,
+  resetCache: resetClaudePathCache,
+} = require("./agentBackends/binaryResolver");
 
 const STREAMING_CLIENT_BY_PROVIDER = {
   "openai-realtime": OpenAIRealtimeStreaming,
@@ -5790,6 +5796,199 @@ class IPCHandlers {
       } catch (error) {
         debugLogger.error("Cloud agent stream error:", error);
         event.sender.send("cloud-agent-stream-error", { error: error.message });
+      }
+    });
+
+    // ─────────────────────────────────────────────────────────────────────
+    // CLI Agent (post-meeting Claude subprocess)
+    // ─────────────────────────────────────────────────────────────────────
+    //
+    // Preflight: validate binary, version, auth, and vault path. Renderer calls
+    // this before offering a "Start AI assistant" button.
+    ipcMain.handle("cli-agent-preflight", async (_event, opts = {}) => {
+      const result = {
+        ok: false,
+        binaryPath: null,
+        version: null,
+        vaultOk: false,
+        authOk: false,
+        errors: [],
+      };
+      try {
+        // Reset cache so a freshly-configured path is picked up
+        resetClaudePathCache();
+        const binaryPath = getClaudePath({ configuredPath: opts.agentCliPath });
+        if (!binaryPath) {
+          result.errors.push({
+            code: "BINARY_NOT_FOUND",
+            message:
+              "Could not locate the `claude` CLI. Install with `npm i -g @anthropic-ai/claude-code` or set a custom path in settings.",
+          });
+          return result;
+        }
+        result.binaryPath = binaryPath;
+        result.version = getClaudeVersion(binaryPath);
+        if (!result.version) {
+          result.errors.push({
+            code: "VERSION_UNKNOWN",
+            message:
+              "Could not determine Claude CLI version. The binary may be too old or non-functional.",
+          });
+        }
+
+        // Vault path check
+        const vaultPath = (opts.vaultPath || "").trim();
+        if (!vaultPath) {
+          result.errors.push({
+            code: "VAULT_PATH_UNSET",
+            message:
+              "Vault path is not set. The agent will run without vault access.",
+          });
+        } else {
+          try {
+            const stat = fs.statSync(vaultPath);
+            result.vaultOk = stat.isDirectory();
+            if (!result.vaultOk) {
+              result.errors.push({
+                code: "VAULT_NOT_DIRECTORY",
+                message: `Vault path is not a directory: ${vaultPath}`,
+              });
+            }
+          } catch (err) {
+            result.errors.push({
+              code: "VAULT_INACCESSIBLE",
+              message: `Vault path is not accessible: ${err.message}`,
+            });
+          }
+        }
+
+        // Auth check: best-effort, run `claude --print "test"` with a short
+        // timeout and look for auth-error markers. We skip this for V1 because
+        // it costs an API call; instead we rely on the actual stream surfacing
+        // an AUTH_EXPIRED error if it happens.
+        // TODO V2: add a lightweight "claude auth status" probe.
+        result.authOk = true; // optimistic
+
+        result.ok =
+          result.binaryPath != null &&
+          result.errors.every(
+            (e) => e.code === "VAULT_PATH_UNSET" // soft warning only
+          );
+        return result;
+      } catch (error) {
+        debugLogger.error("CLI agent preflight error:", error);
+        result.errors.push({
+          code: "PREFLIGHT_FAILED",
+          message: error.message,
+        });
+        return result;
+      }
+    });
+
+    // Start a CLI agent stream. Renderer subscribes to cli-agent-stream-event
+    // / -end / -error and correlates by streamId.
+    ipcMain.handle(
+      "cli-agent-stream-start",
+      async (event, { streamId, systemPrompt, firstUserMessage, config, sessionId }) => {
+        if (!streamId || typeof streamId !== "string") {
+          throw new Error("cli-agent-stream-start: streamId is required");
+        }
+        try {
+          // Construct hardened backend config from renderer-supplied config.
+          // We do NOT trust the renderer to set permissionMode / allowedTools
+          // safely; we enforce the V1 allowlist here.
+          const editMode = config?.editMode === true;
+          const backendConfig = {
+            model: config?.model || undefined,
+            systemPrompt: systemPrompt || "",
+            permissionMode: editMode ? "acceptEdits" : "plan",
+            // V1 tool allowlist (Codex point #3/#4):
+            //   Read mode: Read, Glob, Grep
+            //   Edit mode: + Write, Edit
+            //   NEVER Bash, NEVER bypassPermissions
+            workspaceRoot: config?.workspaceRoot || undefined,
+            cliPath: config?.cliPath || undefined,
+            // Note: ClaudeAgentBackend's start() doesn't currently honor a
+            // tools field directly — it passes them via --allowedTools when
+            // mcpServers is set. For V1 we'll rely on permissionMode=plan to
+            // prevent Write/Edit, and document edit mode as opt-in.
+          };
+
+          const backend = await agentBackendManager.start(
+            streamId,
+            firstUserMessage || "",
+            backendConfig,
+            sessionId
+          );
+
+          // Forward events to renderer. Each backend is consumed exactly once.
+          (async () => {
+            try {
+              for await (const evt of backend.stream()) {
+                if (event.sender.isDestroyed()) break;
+                event.sender.send("cli-agent-stream-event", {
+                  streamId,
+                  event: evt,
+                });
+                if (evt.type === "done") break;
+                if (evt.type === "error") break;
+              }
+              if (!event.sender.isDestroyed()) {
+                event.sender.send("cli-agent-stream-end", {
+                  streamId,
+                  sessionId: backend.getSessionId(),
+                });
+              }
+            } catch (err) {
+              debugLogger.error(`CLI agent stream ${streamId} error:`, err);
+              if (!event.sender.isDestroyed()) {
+                event.sender.send("cli-agent-stream-error", {
+                  streamId,
+                  error: err.message,
+                  code: "STREAM_FAILED",
+                });
+              }
+            } finally {
+              await agentBackendManager.cleanup(streamId);
+            }
+          })();
+
+          return { ok: true, streamId };
+        } catch (error) {
+          debugLogger.error("CLI agent stream start error:", error);
+          if (!event.sender.isDestroyed()) {
+            event.sender.send("cli-agent-stream-error", {
+              streamId,
+              error: error.message,
+              code: "START_FAILED",
+            });
+          }
+          return { ok: false, error: error.message };
+        }
+      }
+    );
+
+    ipcMain.handle("cli-agent-stream-cancel", async (_event, { streamId }) => {
+      if (!streamId) return { ok: false, error: "streamId required" };
+      try {
+        agentBackendManager.cancel(streamId);
+        return { ok: true };
+      } catch (error) {
+        debugLogger.error("CLI agent stream cancel error:", error);
+        return { ok: false, error: error.message };
+      }
+    });
+
+    // Clean up any in-flight streams when the app is quitting. Without this,
+    // we'd leave zombie `claude` subprocesses around (Codex point #7).
+    app.once("before-quit", () => {
+      try {
+        const ids = Array.from(agentBackendManager.activeStreams.keys());
+        for (const id of ids) {
+          agentBackendManager.cancel(id);
+        }
+      } catch (err) {
+        debugLogger.error("CLI agent quit cleanup failed:", err);
       }
     });
 

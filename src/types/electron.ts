@@ -1,5 +1,65 @@
 export type LocalTranscriptionProvider = "whisper" | "nvidia";
 
+// ─────────────────────────────────────────────────────────────────────
+// CLI Agent (post-meeting Claude subprocess)
+// ─────────────────────────────────────────────────────────────────────
+
+export type CliAgentPermissionMode =
+  | "plan"
+  | "default"
+  | "acceptEdits"
+  | "bypassPermissions";
+
+export interface CliAgentPreflightError {
+  code:
+    | "BINARY_NOT_FOUND"
+    | "VERSION_UNKNOWN"
+    | "VAULT_PATH_UNSET"
+    | "VAULT_NOT_DIRECTORY"
+    | "VAULT_INACCESSIBLE"
+    | "PREFLIGHT_FAILED"
+    | string;
+  message: string;
+}
+
+export interface CliAgentPreflightResult {
+  ok: boolean;
+  binaryPath: string | null;
+  version: string | null;
+  vaultOk: boolean;
+  authOk: boolean;
+  errors: CliAgentPreflightError[];
+}
+
+/**
+ * Event union emitted by the CLI agent backend. Mirrors the JSDoc shape from
+ * src/helpers/agentBackends/ChatBackend.js.
+ */
+export type CliAgentBackendEvent =
+  | { type: "text"; chunk: string }
+  | { type: "text_end"; content: string }
+  | { type: "thinking_start" }
+  | { type: "thinking"; chunk: string }
+  | { type: "thinking_end"; content: string; durationMs: number }
+  | {
+      type: "tool_start";
+      id: string;
+      name: string;
+      input: Record<string, unknown>;
+    }
+  | { type: "tool_input"; id: string; input: Record<string, unknown> }
+  | {
+      type: "tool_end";
+      id: string;
+      output?: string;
+      error?: string;
+      durationMs: number;
+    }
+  | { type: "sdk_session"; sessionId: string }
+  | { type: "artifact_delta"; toolId: string; content: string }
+  | { type: "error"; error: string; errorDetails?: string }
+  | { type: "done" };
+
 export type InferenceMode = "openwhispr" | "providers" | "local" | "self-hosted" | "enterprise";
 
 export type SelfHostedType = "openai-compatible" | "lan";
@@ -1394,6 +1454,45 @@ declare global {
         callback: (error: { error: string; code?: string }) => void
       ) => () => void;
       onAgentStreamEnd?: (callback: () => void) => () => void;
+
+      // CLI Agent (post-meeting Claude subprocess)
+      cliAgentPreflight?: (opts: {
+        vaultPath?: string;
+        agentCliPath?: string;
+        model?: string;
+      }) => Promise<CliAgentPreflightResult>;
+      cliAgentStreamStart?: (payload: {
+        streamId: string;
+        systemPrompt: string;
+        firstUserMessage: string;
+        config: {
+          model?: string;
+          workspaceRoot?: string;
+          cliPath?: string;
+          editMode?: boolean;
+        };
+        sessionId?: string;
+      }) => Promise<{ ok: boolean; streamId?: string; error?: string }>;
+      cliAgentStreamCancel?: (
+        streamId: string
+      ) => Promise<{ ok: boolean; error?: string }>;
+      onCliAgentStreamEvent?: (
+        callback: (payload: {
+          streamId: string;
+          event: CliAgentBackendEvent;
+        }) => void
+      ) => () => void;
+      onCliAgentStreamEnd?: (
+        callback: (payload: { streamId: string; sessionId: string | null }) => void
+      ) => () => void;
+      onCliAgentStreamError?: (
+        callback: (payload: {
+          streamId: string;
+          error: string;
+          errorDetails?: string;
+          code?: string;
+        }) => void
+      ) => () => void;
 
       // Agent cloud tools
       agentOpenNote?: (noteId: number) => Promise<{ success: boolean; error?: string }>;

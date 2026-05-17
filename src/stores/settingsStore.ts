@@ -336,6 +336,13 @@ export interface SettingsState
   noteFilesTemplatePath: string;
   vaultPath: string;
 
+  // Post-meeting CLI agent (V1)
+  agentEnabled: boolean;
+  agentBackend: "claude-cli";
+  agentModel: string;
+  agentPermissionMode: "plan" | "default" | "acceptEdits" | "bypassPermissions";
+  agentCliPath: string;
+
   transcriptionMode: InferenceMode;
   remoteTranscriptionType: SelfHostedType;
   remoteTranscriptionUrl: string;
@@ -507,6 +514,12 @@ export interface SettingsState
   setNoteFilesPath: (value: string) => void;
   setNoteFilesTemplatePath: (value: string) => void;
   setVaultPath: (value: string) => void;
+  setAgentEnabled: (value: boolean) => void;
+  setAgentModel: (value: string) => void;
+  setAgentPermissionMode: (
+    value: "plan" | "default" | "acceptEdits" | "bypassPermissions"
+  ) => void;
+  setAgentCliPath: (value: string) => void;
   setIsSignedIn: (value: boolean) => void;
 
   setChatAgentModel: (value: string) => void;
@@ -744,6 +757,23 @@ export const useSettingsStore = create<SettingsState>()((set, get) => ({
   noteFilesPath: readString("noteFilesPath", ""),
   noteFilesTemplatePath: readString("noteFilesTemplatePath", ""),
   vaultPath: readString("vaultPath", ""),
+
+  agentEnabled: readBoolean("agentEnabled", true),
+  agentBackend: "claude-cli" as const,
+  agentModel: readString("agentModel", "sonnet"),
+  agentPermissionMode: (() => {
+    const v = readString("agentPermissionMode", "acceptEdits");
+    if (
+      v === "plan" ||
+      v === "default" ||
+      v === "acceptEdits" ||
+      v === "bypassPermissions"
+    )
+      return v;
+    return "acceptEdits" as const;
+  })(),
+  agentCliPath: readString("agentCliPath", ""),
+
   isSignedIn: readBoolean("isSignedIn", false),
 
   transcriptionMode: (() => {
@@ -1188,6 +1218,16 @@ export const useSettingsStore = create<SettingsState>()((set, get) => ({
   setNoteFilesPath: createStringSetter("noteFilesPath"),
   setNoteFilesTemplatePath: createStringSetter("noteFilesTemplatePath"),
   setVaultPath: createStringSetter("vaultPath"),
+
+  setAgentEnabled: createBooleanSetter("agentEnabled"),
+  setAgentModel: createStringSetter("agentModel"),
+  setAgentPermissionMode: (
+    value: "plan" | "default" | "acceptEdits" | "bypassPermissions"
+  ) => {
+    if (isBrowser) localStorage.setItem("agentPermissionMode", value);
+    set({ agentPermissionMode: value });
+  },
+  setAgentCliPath: createStringSetter("agentCliPath"),
 
   setIsSignedIn: (value: boolean) => {
     if (isBrowser) localStorage.setItem("isSignedIn", String(value));
