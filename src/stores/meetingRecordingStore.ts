@@ -531,6 +531,15 @@ function reserveSpeakerIndex(speakerId?: string) {
   nextPlaceholderSpeakerIndex = Math.max(nextPlaceholderSpeakerIndex, idx + 1);
 }
 
+function mintPlaceholderSpeakerId(): string {
+  const expected =
+    useMeetingRecordingStore.getState().sessionExpectedCount ?? DEFAULT_EXPECTED_SPEAKER_COUNT;
+  const maxSystemSpeakers = Math.max(1, Math.min(expected, MAX_SPEAKER_COUNT) - 1);
+  const idx = Math.min(nextPlaceholderSpeakerIndex, maxSystemSpeakers - 1);
+  nextPlaceholderSpeakerIndex += 1;
+  return `speaker_${idx}`;
+}
+
 function assignProvisionalSpeaker(segment: TranscriptSegment): TranscriptSegment {
   if (segment.source !== "system" || segment.speaker) return segment;
 
@@ -578,8 +587,7 @@ function assignProvisionalSpeaker(segment: TranscriptSegment): TranscriptSegment
     });
   }
 
-  const speakerId = `speaker_${nextPlaceholderSpeakerIndex}`;
-  nextPlaceholderSpeakerIndex += 1;
+  const speakerId = mintPlaceholderSpeakerId();
 
   return normalizeTranscriptSegment({
     ...segment,
@@ -881,11 +889,6 @@ export async function startRecording(args: StartRecordingArgs): Promise<void> {
             useMeetingRecordingStore.setState({ micPartial: data.text });
           } else {
             useMeetingRecordingStore.setState({ systemPartial: data.text });
-            if (!systemPartialSpeakerIdValue) {
-              const speakerId = `speaker_${nextPlaceholderSpeakerIndex}`;
-              nextPlaceholderSpeakerIndex += 1;
-              setSystemPartialSpeakerIdentity(speakerId, null);
-            }
           }
           return;
         }

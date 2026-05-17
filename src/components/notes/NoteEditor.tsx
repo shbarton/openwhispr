@@ -42,6 +42,7 @@ import {
   serializeTranscriptSegments,
 } from "../../utils/transcriptSpeakerState";
 import NoteParticipants from "./NoteParticipants";
+import MeetingMetadataRow from "./MeetingMetadataRow";
 import type { CalendarAttendee } from "../../types/calendar";
 
 function formatNoteDate(dateStr: string): string {
@@ -105,6 +106,7 @@ interface NoteEditorProps {
   onMoveToFolder?: (noteId: number, folderId: number) => void;
   onCreateFolderAndMove?: (noteId: number, folderName: string) => void;
   onOpenMeetingSetup?: () => void;
+  onNoteMetadataUpdate?: (updates: Partial<NoteItem>) => void;
 }
 
 export default function NoteEditor({
@@ -142,6 +144,7 @@ export default function NoteEditor({
   onMoveToFolder,
   onCreateFolderAndMove,
   onOpenMeetingSetup,
+  onNoteMetadataUpdate,
 }: NoteEditorProps) {
   const { t } = useTranslation();
   const [viewMode, setViewMode] = useState<MeetingViewMode>("raw");
@@ -610,15 +613,9 @@ export default function NoteEditor({
                 <span className="truncate max-w-40">{calendarEventName}</span>
               </span>
             )}
-            <NoteParticipants noteId={note.id} participants={parsedParticipants} />
-            {onOpenMeetingSetup && (
-              <button
-                onClick={onOpenMeetingSetup}
-                className="inline-flex items-center gap-1.5 text-[11px] px-1.5 py-0.5 rounded-md border border-border/70 dark:border-white/25 text-foreground/50 dark:text-foreground/35 hover:text-foreground/60 hover:border-border/60 hover:bg-foreground/3 dark:hover:text-foreground/40 dark:hover:border-white/10 dark:hover:bg-white/3 transition-all duration-150 cursor-pointer outline-none"
-              >
-                <Pencil size={10} className="shrink-0" />
-                {t("notes.editor.meetingDetails", "Meeting details")}
-              </button>
+            {/* For non-meeting notes, show only participants */}
+            {note.note_type !== "meeting" && (
+              <NoteParticipants noteId={note.id} participants={parsedParticipants} />
             )}
             {folders && onMoveToFolder && (
               <DropdownMenu
@@ -855,6 +852,11 @@ export default function NoteEditor({
               )}
             </div>
           </div>
+
+          {/* Inline metadata row for meeting notes */}
+          {note.note_type === "meeting" && onNoteMetadataUpdate && (
+            <MeetingMetadataRow note={note} onUpdate={onNoteMetadataUpdate} />
+          )}
         </div>
 
         <div className="flex-1 relative min-h-0">

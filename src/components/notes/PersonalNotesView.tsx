@@ -46,6 +46,7 @@ import ActionPicker from "./ActionPicker";
 import ActionManagerDialog from "./ActionManagerDialog";
 import AddNotesToFolderDialog from "./AddNotesToFolderDialog";
 import MeetingSetupDialog, { type MeetingMetadata } from "./MeetingSetupDialog";
+import type { NoteItem } from "../../types/electron";
 import { useActionProcessing } from "../../hooks/useActionProcessing";
 import { useSettingsStore, selectIsCloudCleanupMode } from "../../stores/settingsStore";
 import { useFolderManagement } from "../../hooks/useFolderManagement";
@@ -380,6 +381,17 @@ export default function PersonalNotesView({
       setShowMeetingSetup(false);
     },
     [activeNoteId, activeFolderId, loadFolders]
+  );
+
+  // Inline metadata update handler (for MeetingMetadataRow)
+  const handleNoteMetadataUpdate = useCallback(
+    async (updates: Partial<NoteItem>) => {
+      if (activeNoteId) {
+        await window.electronAPI.updateNote(activeNoteId, updates);
+        // The note store will be updated via IPC listener (onNoteUpdated)
+      }
+    },
+    [activeNoteId]
   );
 
   const handleNewNoteFolderChange = useCallback((val: string) => {
@@ -1012,6 +1024,7 @@ export default function PersonalNotesView({
               onMoveToFolder={handleMoveToFolder}
               onCreateFolderAndMove={handleCreateFolderAndMove}
               onOpenMeetingSetup={handleOpenMeetingSetup}
+              onNoteMetadataUpdate={handleNoteMetadataUpdate}
               actionProcessingState={actionProcessingState}
               actionName={actionName}
               actionPicker={

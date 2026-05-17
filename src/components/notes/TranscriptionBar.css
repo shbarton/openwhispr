@@ -1,0 +1,445 @@
+/* TranscriptionBar — Calyx-adapted glassmorphism widget
+   Inspired by SpellStream/HandyVoice overlay, using Calyx design tokens */
+
+/* ── CSS Custom Properties for Waveform Bars ── */
+.transcription-bar {
+  --bar-0: 0.12;
+  --bar-1: 0.12;
+  --bar-2: 0.12;
+  --bar-3: 0.12;
+  --bar-4: 0.12;
+  --bar-5: 0.12;
+  --bar-6: 0.12;
+  --bar-7: 0.12;
+  --bar-8: 0.12;
+  --bar-9: 0.12;
+  --bar-10: 0.12;
+  --bar-11: 0.12;
+  --bar-12: 0.12;
+  --bar-13: 0.12;
+  --bar-14: 0.12;
+  --bar-15: 0.12;
+  --bar-16: 0.12;
+  --bar-17: 0.12;
+  --bar-18: 0.12;
+  --bar-19: 0.12;
+  --bar-20: 0.12;
+  --bar-21: 0.12;
+  --bar-22: 0.12;
+  --bar-23: 0.12;
+}
+
+/* ── Container ── */
+.transcription-bar-container {
+  position: fixed;
+  bottom: 12px;
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 9999;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 4px;
+  pointer-events: none;
+}
+
+.transcription-bar-container > * {
+  pointer-events: auto;
+}
+
+/* ── Idle State ── */
+.transcription-bar-idle {
+  width: 56px;
+  height: 6px;
+  min-height: 44px; /* Accessible hit area */
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  border-radius: 9999px;
+  transition:
+    width 300ms cubic-bezier(0.4, 0, 0.2, 1),
+    height 300ms cubic-bezier(0.4, 0, 0.2, 1),
+    background 300ms cubic-bezier(0.4, 0, 0.2, 1),
+    box-shadow 300ms cubic-bezier(0.4, 0, 0.2, 1);
+  position: relative;
+}
+
+.transcription-bar-idle-line {
+  width: 100%;
+  height: 4px;
+  border-radius: 9999px;
+  background: linear-gradient(
+    90deg,
+    var(--color-muted-foreground) 0%,
+    var(--color-accent-light) 50%,
+    var(--color-muted-foreground) 100%
+  );
+  background-size: 200% 100%;
+  opacity: 0.35;
+  transition:
+    opacity 200ms cubic-bezier(0.4, 0, 0.2, 1),
+    transform 200ms cubic-bezier(0.4, 0, 0.2, 1);
+  position: relative;
+  overflow: hidden;
+}
+
+/* Subtle shimmer animation on idle line */
+.transcription-bar-idle-line::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(
+    90deg,
+    transparent 0%,
+    rgba(255, 255, 255, 0.2) 50%,
+    transparent 100%
+  );
+  animation: idle-shimmer 3s ease-in-out infinite;
+}
+
+@keyframes idle-shimmer {
+  0%, 100% {
+    transform: translateX(-100%);
+  }
+  50% {
+    transform: translateX(100%);
+  }
+}
+
+/* Hover state — expand to pill */
+.transcription-bar-idle:hover,
+.transcription-bar-idle:focus-visible {
+  width: 140px;
+  height: 24px;
+  background: linear-gradient(
+    135deg,
+    var(--color-surface-raised) 0%,
+    var(--color-surface-hover) 100%
+  );
+  backdrop-filter: blur(24px) saturate(200%);
+  -webkit-backdrop-filter: blur(24px) saturate(200%);
+  border: 1px solid var(--color-border-subtle);
+  box-shadow:
+    0 2px 8px rgba(0, 0, 0, 0.08),
+    0 0 20px var(--color-accent-light);
+}
+
+.transcription-bar-idle:hover .transcription-bar-idle-line,
+.transcription-bar-idle:focus-visible .transcription-bar-idle-line {
+  opacity: 0;
+  transform: scaleX(0.7);
+}
+
+/* Idle waveform preview (visible on hover) */
+.transcription-bar-idle-waveform {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 2px;
+  padding: 0 10px;
+  opacity: 0;
+  transform: translateY(1px) scale(0.98);
+  transition:
+    opacity 200ms cubic-bezier(0.4, 0, 0.2, 1),
+    transform 200ms cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+.transcription-bar-idle:hover .transcription-bar-idle-waveform,
+.transcription-bar-idle:focus-visible .transcription-bar-idle-waveform {
+  opacity: 1;
+  transform: translateY(0) scale(1);
+}
+
+.transcription-bar-idle-waveform-bar {
+  width: 2px;
+  height: 10px;
+  border-radius: 1px;
+  background: linear-gradient(
+    180deg,
+    var(--color-accent) 0%,
+    var(--color-accent-muted) 100%
+  );
+  transform-origin: center;
+}
+
+/* ── Active State (Recording/Transcribing) ── */
+.transcription-bar {
+  height: 24px;
+  min-width: 100px;
+  max-width: 140px;
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  padding: 2px 6px;
+  border-radius: 9999px;
+
+  /* Glassmorphism */
+  background: linear-gradient(
+    135deg,
+    var(--color-surface-raised) 0%,
+    var(--color-surface-hover) 100%
+  );
+  backdrop-filter: blur(24px) saturate(200%);
+  -webkit-backdrop-filter: blur(24px) saturate(200%);
+
+  /* Border and shadow */
+  border: 1px solid var(--color-border-subtle);
+  box-shadow:
+    inset 0 1px 1px rgba(255, 255, 255, 0.1),
+    inset 0 -1px 1px rgba(0, 0, 0, 0.1);
+
+  /* Animation */
+  animation: bar-expand 200ms cubic-bezier(0.2, 0.8, 0.2, 1) forwards;
+}
+
+@keyframes bar-expand {
+  from {
+    opacity: 0;
+    transform: scale(0.96);
+  }
+  to {
+    opacity: 1;
+    transform: scale(1);
+  }
+}
+
+/* ── Waveform Container ── */
+.transcription-bar-waveform {
+  flex: 1;
+  height: 14px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 1px;
+  min-width: 0;
+  overflow: hidden;
+}
+
+/* Individual waveform bar */
+.transcription-bar-waveform-bar {
+  width: 2px;
+  height: 12px;
+  flex-shrink: 0;
+  border-radius: 1px;
+  transform-origin: center;
+  transition:
+    transform 60ms cubic-bezier(0.4, 0, 0.2, 1),
+    opacity 80ms ease;
+}
+
+/* Recording state — sage green gradient */
+.transcription-bar.recording .transcription-bar-waveform-bar {
+  background: linear-gradient(
+    180deg,
+    var(--color-accent) 0%,
+    var(--color-primary) 50%,
+    var(--color-accent-secondary, var(--color-primary)) 100%
+  );
+  filter: drop-shadow(0 0 2px var(--color-accent-light));
+}
+
+/* Transcribing state — lighter gradient with pulse */
+.transcription-bar.transcribing .transcription-bar-waveform-bar {
+  background: linear-gradient(
+    180deg,
+    var(--color-accent-subtle) 0%,
+    var(--color-accent-muted) 50%,
+    var(--color-accent) 100%
+  );
+  filter: drop-shadow(0 0 3px var(--color-accent-light));
+}
+
+/* ── Buttons ── */
+.transcription-bar-button {
+  position: relative;
+  width: 16px;
+  height: 16px;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  transition: all 150ms cubic-bezier(0.2, 0.8, 0.2, 1);
+  flex-shrink: 0;
+  border: 1px solid rgba(255, 255, 255, 0.05);
+}
+
+.transcription-bar-button:focus-visible {
+  outline: 2px solid var(--color-ring);
+  outline-offset: 2px;
+}
+
+/* Cancel button — neutral */
+.transcription-bar-cancel {
+  background: var(--color-muted);
+  color: var(--color-foreground);
+  box-shadow:
+    inset 0 1px 1px rgba(255, 255, 255, 0.05),
+    0 1px 2px rgba(0, 0, 0, 0.1);
+}
+
+.transcription-bar-cancel:hover {
+  background: var(--color-secondary);
+  transform: scale(1.1);
+}
+
+.transcription-bar-cancel:active {
+  transform: scale(0.92);
+}
+
+/* Stop button — accent */
+.transcription-bar-stop {
+  background: linear-gradient(
+    135deg,
+    var(--color-accent) 0%,
+    var(--color-primary) 100%
+  );
+  color: var(--color-primary-foreground);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.3);
+}
+
+.transcription-bar-stop:hover {
+  background: linear-gradient(
+    135deg,
+    var(--color-primary) 0%,
+    var(--color-accent) 100%
+  );
+  transform: scale(1.1);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.4);
+}
+
+.transcription-bar-stop:active {
+  transform: scale(0.92);
+}
+
+/* ── Error State ── */
+.transcription-bar.error {
+  background: linear-gradient(
+    135deg,
+    var(--color-destructive) / 0.1 0%,
+    var(--color-destructive) / 0.15 100%
+  );
+  border-color: var(--color-destructive) / 0.3;
+}
+
+.transcription-bar-error {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  color: var(--color-destructive);
+  font-size: 9px;
+  font-weight: 500;
+  font-family: var(--font-family-sans);
+  text-align: center;
+  max-width: 120px;
+  line-height: 1.2;
+}
+
+.transcription-bar-error-icon {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  background: var(--color-destructive) / 0.2;
+  font-size: 8px;
+  font-weight: 700;
+  flex-shrink: 0;
+}
+
+/* ── Slow Transcription Message ── */
+.transcription-bar-slow-message {
+  padding: 3px 8px;
+  font-size: 10px;
+  line-height: 1.3;
+  font-weight: 500;
+  font-family: var(--font-family-sans);
+  color: var(--color-foreground);
+  background: linear-gradient(
+    135deg,
+    var(--color-surface-raised) 0%,
+    var(--color-surface-hover) 100%
+  );
+  backdrop-filter: blur(16px) saturate(180%);
+  -webkit-backdrop-filter: blur(16px) saturate(180%);
+  border: 1px solid var(--color-border-subtle);
+  border-radius: 8px;
+  box-shadow:
+    0 2px 8px rgba(0, 0, 0, 0.06),
+    0 0 10px var(--color-accent-light);
+  white-space: nowrap;
+  animation: slow-message-in 200ms cubic-bezier(0.2, 0.8, 0.2, 1) forwards;
+}
+
+@keyframes slow-message-in {
+  from {
+    opacity: 0;
+    transform: translateY(4px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+/* ── Reduced Motion ── */
+@media (prefers-reduced-motion: reduce) {
+  .transcription-bar-idle-line::after {
+    animation: none;
+  }
+
+  .transcription-bar {
+    animation: none;
+    opacity: 1;
+    transform: scale(1);
+  }
+
+  .transcription-bar-waveform-bar {
+    transition: none;
+  }
+
+  .transcription-bar-slow-message {
+    animation: none;
+    opacity: 1;
+    transform: translateY(0);
+  }
+
+  .transcription-bar-idle,
+  .transcription-bar-idle-line,
+  .transcription-bar-idle-waveform,
+  .transcription-bar-button {
+    transition: none;
+  }
+}
+
+/* ── Dark Mode Adjustments ── */
+.dark .transcription-bar-idle-line::after {
+  background: linear-gradient(
+    90deg,
+    transparent 0%,
+    rgba(255, 255, 255, 0.1) 50%,
+    transparent 100%
+  );
+}
+
+.dark .transcription-bar,
+.dark .transcription-bar-idle:hover {
+  box-shadow:
+    inset 0 1px 1px rgba(255, 255, 255, 0.05),
+    inset 0 -1px 1px rgba(0, 0, 0, 0.2),
+    0 4px 12px rgba(0, 0, 0, 0.25);
+}
+
+/* ── Backdrop Filter Fallback ── */
+@supports not (backdrop-filter: blur(24px)) {
+  .transcription-bar,
+  .transcription-bar-idle:hover,
+  .transcription-bar-slow-message {
+    background: var(--color-surface-raised);
+    border-color: var(--color-border);
+  }
+}

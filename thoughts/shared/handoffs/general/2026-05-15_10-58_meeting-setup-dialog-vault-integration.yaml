@@ -1,0 +1,78 @@
+---
+session: general
+date: 2026-05-15
+status: complete
+outcome: SUCCEEDED
+---
+
+goal: Shipped Meeting Setup Dialog with Calyx vault metadata autocomplete (tags + projects) end-to-end; reviewed UI/UX reskin plan and scaffolded follow-up tasks
+now: Decide on the 4 open questions in ui-ux-review.md (radius, micro-shrink, dark warmth, metallic shadows), then start the calyx-design-tokens task
+test: Open OpenWhispr → Settings → Meetings → set Calyx Vault to ~/Desktop/PlatosRaveCave → open Meeting Details dialog → tags + projects autocomplete from vault
+
+done_this_session:
+  - task: Built MeetingSetupDialog UI (title/project/tags/participants/description) with vault autocomplete
+    files: [src/components/notes/MeetingSetupDialog.tsx, src/components/notes/NoteEditor.tsx, src/components/notes/PersonalNotesView.tsx]
+  - task: Added VaultPathRow in Meeting settings (browse + validate + persist)
+    files: [src/components/settings/MeetingSettings.tsx, src/stores/settingsStore.ts, src/App.jsx]
+  - task: Vault metadata IPC plumbing + provider (parses .chiron/properties-index.json)
+    files: [src/helpers/vaultMetadata.js, src/helpers/ipcHandlers.js, preload.js, src/types/electron.ts]
+  - task: Fixed two bugs found during testing — localeCompare on non-string title, and projects array containing object titles
+    files: [src/helpers/vaultMetadata.js, src/components/notes/MeetingSetupDialog.tsx]
+  - task: /simplify cleanup after 3-agent review (commit cbed72e)
+    files: [src/utils/avatarUtils.ts, src/helpers/vaultMetadata.js, src/helpers/ipcHandlers.js, src/components/settings/MeetingSettings.tsx]
+  - task: Reviewed agent's UI/UX reskin report; created 2 follow-up tasks for component polish
+    files: [projects/openwhispr/tasks/calyx-button-component-polish/index.md, projects/openwhispr/tasks/calyx-select-dropdown-polish/index.md]
+
+blockers: []
+
+questions:
+  - 4 open questions from ui-ux-review.md (border radius 6 vs 8 vs 10, keep micro-shrink, dark warmth direction, strip metallic shadows)
+  - Whether to add `track:` frontmatter for campaign grouping (recommendation was no — tags already do it)
+
+decisions:
+  - setVaultPath returns {valid,error}: collapsed path-exists IPC into setVaultPath so vault detection is single-sourced in the main process
+  - cache signature check before broadcast: prevents thrashing renderers on unrelated vault saves (Calyx writes the index frequently)
+  - async readFile + 1000ms debounce: unblock main thread; autocomplete tolerates staleness
+  - keep tags-based categorization (ui + calyx-alignment): existing convention, no new frontmatter needed yet
+  - kept generic show-open-dialog IPC over reusing noteFilesPickFolder: more future-proof shape
+
+findings:
+  - Real vault index schema is {snapshots: {uri: {properties: {type, tags, title, ...}}}} — NOT top-level tags/projects (codex consultation caught this assumption mismatch in a similar context)
+  - Some vault project titles are non-string (likely parsed wikilink objects); some local note `project` fields are objects too — both needed defensive coercion
+  - Electron main process doesn't hot-reload — every vaultMetadata.js change required full app restart during dev
+  - pkill against Electron processes from harness fails ("Operation not permitted") for sam-owned procs; user must quit app manually or use `lsof -ti:5183 | xargs kill -9` (sometimes works)
+
+worked:
+  - Consulting Codex when stuck on "why is metadata empty" — flagged schema-mismatch and async race possibilities before I went deeper
+  - Console-log injection into vault provider to see the real error (`localeCompare is not a function`) instead of guessing
+  - Parallel scout agents for /simplify review (reuse + quality + efficiency) — found redundant IPC + sync FS read + missing change detection
+
+failed:
+  - Initial pathExists IPC + separate setVaultPath was TOCTOU + duplicated work — caught by efficiency review, collapsed
+  - Trying to kill stuck Electron from harness — permission denied; user has to do it
+  - First attempt at empty-vault diagnosis assumed it was a race, but real cause was a parse exception swallowed into "keep previous cache"
+
+next:
+  - Sam decides the 4 open UI questions in ui-ux-review.md
+  - Start calyx-design-tokens task (foundation — blocks button + select polish)
+  - Test recording a real meeting now that the dialog ships (we set up the flow but didn't do an end-to-end record)
+  - Consider `complexity:` or `effort:` enum on tasks (mentioned as separate question to Sam)
+
+files:
+  created:
+    - src/components/notes/MeetingSetupDialog.tsx
+    - src/helpers/vaultMetadata.js
+    - src/utils/avatarUtils.ts
+    - projects/openwhispr/tasks/calyx-button-component-polish/index.md
+    - projects/openwhispr/tasks/calyx-select-dropdown-polish/index.md
+  modified:
+    - src/App.jsx
+    - src/components/notes/NoteEditor.tsx
+    - src/components/notes/NoteParticipants.tsx
+    - src/components/notes/PersonalNotesView.tsx
+    - src/components/settings/MeetingSettings.tsx
+    - src/helpers/database.js
+    - src/helpers/ipcHandlers.js
+    - src/stores/settingsStore.ts
+    - src/types/electron.ts
+    - preload.js
