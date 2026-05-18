@@ -35,6 +35,7 @@ import EmbeddedChat, { type EmbeddedChatMode } from "./EmbeddedChat";
 import { useEmbeddedChat } from "../../hooks/useEmbeddedChat";
 import MeetingEmbeddedChat from "./MeetingEmbeddedChat";
 import { useSettingsStore } from "../../stores/settingsStore";
+import { formatHotkeySymbols } from "../../utils/hotkeys";
 import { normalizeDbDate } from "../../utils/dateFormatting";
 import { parseTranscriptSegments } from "../../utils/parseTranscriptSegments";
 import {
@@ -176,7 +177,14 @@ export default function NoteEditor({
   // Meeting notes with the agent enabled use the CLI-backed embedded chat
   // (Claude Code subprocess) — everything else stays on the existing
   // Vercel-AI-SDK-backed flow above.
-  const useCliChat = note.note_type === "meeting" && agentEnabled;
+  const isMeetingNote = note.note_type === "meeting";
+  const useCliChat = isMeetingNote && agentEnabled;
+  // Display-only mirror of the user's meeting hotkey — actual firing is
+  // handled globally by `meetingHotkeyCallback` in main.js.
+  const meetingKey = useSettingsStore((s) => s.meetingKey);
+  const recordShortcutLabel = meetingKey
+    ? formatHotkeySymbols(meetingKey)
+    : undefined;
   const titleRef = useRef<HTMLDivElement>(null);
   const prevNoteIdRef = useRef<number>(note.id);
   const autoShowDoneRef = useRef(false);
@@ -952,6 +960,8 @@ export default function NoteEditor({
             // bottom-bar collapsed form. For other notes, hide while the
             // chat panel is open as before.
             hideInput={useCliChat || chatMode !== "hidden"}
+            meetingMode={isMeetingNote}
+            recordShortcutLabel={recordShortcutLabel}
           />
           {/* Floating mode is only used by the API-backed flow. Meeting
               notes never enter floating — they coerce to sidebar in the

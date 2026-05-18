@@ -166,3 +166,66 @@ export function isValidHotkeyFormat(hotkey: string): boolean {
   // Check that all parts are non-empty
   return parts.every((part) => part.trim().length > 0);
 }
+
+const MAC_MOD_SYMBOLS: Record<string, string> = {
+  CommandOrControl: "⌘",
+  Command: "⌘",
+  Cmd: "⌘",
+  Meta: "⌘",
+  Super: "⌘",
+  Shift: "⇧",
+  Alt: "⌥",
+  Option: "⌥",
+  Control: "⌃",
+  Ctrl: "⌃",
+};
+const MAC_KEY_SYMBOLS: Record<string, string> = {
+  Enter: "⏎",
+  Return: "⏎",
+  Escape: "⎋",
+  Esc: "⎋",
+  Tab: "⇥",
+  Backspace: "⌫",
+  Delete: "⌦",
+  Space: "␣",
+  ArrowUp: "↑",
+  ArrowDown: "↓",
+  ArrowLeft: "←",
+  ArrowRight: "→",
+  PageUp: "⇞",
+  PageDown: "⇟",
+  Home: "↖",
+  End: "↘",
+};
+
+/**
+ * Compact symbolic rendering of a hotkey for inline UI hints.
+ *
+ * On macOS, returns the Apple keyboard glyphs concatenated with no
+ * separator: e.g. "Command+Shift+M" → "⌘⇧M". On Windows/Linux there
+ * are no universally-recognized symbols for the modifier keys, so it
+ * falls back to the existing platform label ("Ctrl+Shift+M").
+ */
+export function formatHotkeySymbols(hotkey?: string | null): string {
+  if (!hotkey || hotkey.trim() === "") return "";
+  if (isGlobeLikeHotkey(hotkey)) return "Globe";
+
+  const platform = getPlatform();
+  if (platform !== "darwin") {
+    return formatHotkeyLabelForPlatform(hotkey, platform);
+  }
+
+  if (!hotkey.includes("+")) {
+    return MAC_KEY_SYMBOLS[hotkey] ?? hotkey.toUpperCase();
+  }
+
+  return hotkey
+    .split("+")
+    .map(
+      (part) =>
+        MAC_MOD_SYMBOLS[part] ??
+        MAC_KEY_SYMBOLS[part] ??
+        (part.length === 1 ? part.toUpperCase() : part)
+    )
+    .join("");
+}

@@ -1917,6 +1917,7 @@
       "noteTitle": "Note title",
       "stop": "Stop",
       "transcribe": "Transcribe",
+      "record": "Record",
       "processing": "Processing...",
       "export": "Export",
       "asMarkdown": "As Markdown",

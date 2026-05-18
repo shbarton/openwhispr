@@ -2,6 +2,7 @@ import { useState, useRef, useCallback, useEffect } from "react";
 import { useTranslation } from "react-i18next";
 import { Mic, ArrowUp, Square, Loader2 } from "lucide-react";
 import { cn } from "../lib/utils";
+import { Tooltip } from "../ui/tooltip";
 
 const BAR_COUNT = 5;
 
@@ -15,6 +16,8 @@ interface NoteBottomBarProps {
   askDisabled?: boolean;
   actionPicker?: React.ReactNode;
   hideInput?: boolean;
+  meetingMode?: boolean;
+  recordShortcutLabel?: string;
 }
 
 export default function NoteBottomBar({
@@ -27,8 +30,11 @@ export default function NoteBottomBar({
   askDisabled,
   actionPicker,
   hideInput,
+  meetingMode,
+  recordShortcutLabel,
 }: NoteBottomBarProps) {
   const { t } = useTranslation();
+  const recordLabel = t("notes.editor.record", "Record");
   const [inputText, setInputText] = useState("");
   const [isExpanded, setIsExpanded] = useState(false);
   const inputRef = useRef<HTMLInputElement>(null);
@@ -143,6 +149,44 @@ export default function NoteBottomBar({
             >
               <Loader2 size={14} className="animate-spin text-foreground/25" />
             </div>
+          ) : meetingMode ? (
+            // Custom Tooltip (not native `title`) — Electron swallows
+            // native HTML tooltips in this surface.
+            <Tooltip
+              content={
+                recordShortcutLabel
+                  ? `${recordLabel} · ${recordShortcutLabel}`
+                  : recordLabel
+              }
+              delay={500}
+            >
+              <button
+                onClick={onStartRecording}
+                className={cn(
+                  "flex items-center gap-2.5 h-10 pl-3 pr-3.5 rounded-xl",
+                  "bg-primary/8 dark:bg-primary/12",
+                  "border border-primary/25 dark:border-primary/30",
+                  "text-primary",
+                  "transition-colors duration-150",
+                  "hover:bg-primary/14 dark:hover:bg-primary/18",
+                  "hover:border-primary/40 dark:hover:border-primary/45",
+                  "focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-primary/45"
+                )}
+                aria-label={recordLabel}
+              >
+                <span
+                  className={cn(
+                    "flex items-center justify-center w-6 h-6 rounded-full",
+                    "bg-primary/18 dark:bg-primary/22"
+                  )}
+                >
+                  <Mic size={13} />
+                </span>
+                <span className="text-[13px] font-medium tracking-tight whitespace-nowrap">
+                  {recordLabel}
+                </span>
+              </button>
+            </Tooltip>
           ) : (
             <button
               onClick={onStartRecording}

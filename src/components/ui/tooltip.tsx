@@ -4,13 +4,16 @@ import { createPortal } from "react-dom";
 interface TooltipProps {
   children: React.ReactNode;
   content: string;
+  /** Hover delay in ms before the tooltip appears. */
+  delay?: number;
 }
 
-export const Tooltip = ({ children, content }: TooltipProps) => {
+export const Tooltip = ({ children, content, delay = 0 }: TooltipProps) => {
   const [isVisible, setIsVisible] = useState(false);
   const [position, setPosition] = useState<{ top: number; left: number } | null>(null);
   const triggerRef = useRef<HTMLDivElement>(null);
   const tooltipRef = useRef<HTMLDivElement>(null);
+  const showTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const updatePosition = useCallback(() => {
     if (!triggerRef.current) return;
@@ -25,6 +28,12 @@ export const Tooltip = ({ children, content }: TooltipProps) => {
     if (!isVisible) return;
     updatePosition();
   }, [isVisible, updatePosition]);
+
+  useEffect(() => {
+    return () => {
+      if (showTimerRef.current) clearTimeout(showTimerRef.current);
+    };
+  }, []);
 
   // Adjust if tooltip overflows viewport edges
   useEffect(() => {
@@ -49,8 +58,24 @@ export const Tooltip = ({ children, content }: TooltipProps) => {
       <div
         ref={triggerRef}
         className="relative inline-flex"
-        onMouseEnter={() => setIsVisible(true)}
-        onMouseLeave={() => setIsVisible(false)}
+        onMouseEnter={() => {
+          if (showTimerRef.current) {
+            clearTimeout(showTimerRef.current);
+            showTimerRef.current = null;
+          }
+          if (delay <= 0) {
+            setIsVisible(true);
+            return;
+          }
+          showTimerRef.current = setTimeout(() => setIsVisible(true), delay);
+        }}
+        onMouseLeave={() => {
+          if (showTimerRef.current) {
+            clearTimeout(showTimerRef.current);
+            showTimerRef.current = null;
+          }
+          setIsVisible(false);
+        }}
       >
         {children}
       </div>
