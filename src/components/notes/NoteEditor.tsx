@@ -45,6 +45,7 @@ import {
 } from "../../utils/transcriptSpeakerState";
 import NoteParticipants from "./NoteParticipants";
 import MeetingMetadataRow from "./MeetingMetadataRow";
+import MeetingChatRail from "./MeetingChatRail";
 import type { CalendarAttendee } from "../../types/calendar";
 
 function formatNoteDate(dateStr: string): string {
@@ -883,15 +884,7 @@ export default function NoteEditor({
 
           {/* Inline metadata row for meeting notes */}
           {note.note_type === "meeting" && onNoteMetadataUpdate && (
-            <MeetingMetadataRow
-              note={note}
-              onUpdate={onNoteMetadataUpdate}
-              onOpenChat={
-                useCliChat && chatMode === "hidden"
-                  ? () => setChatMode("sidebar")
-                  : undefined
-              }
-            />
+            <MeetingMetadataRow note={note} onUpdate={onNoteMetadataUpdate} />
           )}
         </div>
 
@@ -990,6 +983,9 @@ export default function NoteEditor({
           )}
         </div>
       </div>
+      {/* Right side of the note: either the full chat sidebar, or — for
+          meeting notes only — a thin collapsed rail when chat is hidden.
+          Non-meeting notes simply render nothing when hidden. */}
       {chatMode === "sidebar" &&
         (useCliChat ? (
           <MeetingEmbeddedChat
@@ -1011,6 +1007,9 @@ export default function NoteEditor({
             onNewChat={embeddedChat.startNewChat}
           />
         ))}
+      {chatMode === "hidden" && useCliChat && (
+        <MeetingChatRail onExpand={() => setChatMode("sidebar")} />
+      )}
     </div>
   );
 }
