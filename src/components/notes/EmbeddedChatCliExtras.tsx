@@ -1,0 +1,339 @@
+/**
+ * EmbeddedChatCliExtras — the CLI-only bits that plug into EmbeddedChat's
+ * slot props (headerExtras / aboveInput / emptyStateOverride) when the
+ * chat is backed by the Claude Code CLI. Stays out of the regular API
+ * path entirely.
+ */
+
+import {
+  useCallback,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+  type ReactNode,
+} from "react";
+import {
+  AlertCircle,
+  CheckCircle2,
+  Eye,
+  FileCode,
+  FileEdit,
+  Wand2,
+  Sparkles,
+} from "lucide-react";
+import { cn } from "../lib/utils";
+
+interface SlashEntry {
+  name: string;
+  source: "user" | "project";
+  kind: "skill" | "command";
+}
+
+interface CliExtrasState {
+  readOnly: boolean;
+  setReadOnly: (v: boolean) => void;
+  inputValue: string;
+  setInputValue: (v: string) => void;
+  preflightState: "unknown" | "checking" | "ok" | "blocked";
+  preflightBinaryVersion: string | null;
+  preflightVaultOk: boolean;
+  preflightErrors: Array<{ code: string; message: string }>;
+  rerunPreflight: () => Promise<void>;
+}
+
+interface UseCliExtrasArgs {
+  vaultPath: string;
+  agentState: string;
+  cli: CliExtrasState;
+  hasMessages: boolean;
+  sendMessage: (text: string) => void;
+  /** Suggestion-chip prompts shown when the chat is empty. */
+  suggestions?: Array<{ label: string; prompt: string }>;
+}
+
+const DEFAULT_SUGGESTIONS = [
+  { label: "Summarise", prompt: "Give me a concise summary of this meeting." },
+  {
+    label: "Action items",
+    prompt:
+      "Extract 3-5 action items as bullets. Include who's responsible if it's clear from the transcript.",
+  },
+  {
+    label: "Follow-ups",
+    prompt:
+      "What follow-up conversations or questions should I chase up after this meeting?",
+  },
+];
+
+/**
+ * Hook that produces the three slot renderables for EmbeddedChat.
+ * Returns null in places where the CLI flow has nothing to add (e.g. no
+ * autocomplete dropdown when not slash-typing).
+ */
+export function useCliExtras(args: UseCliExtrasArgs): {
+  headerExtras: ReactNode;
+  aboveInput: ReactNode;
+  emptyState: ReactNode;
+  onInputKeyDownIntercept: (
+    e: React.KeyboardEvent<HTMLInputElement>
+  ) => boolean;
+} {
+  const { vaultPath, agentState, cli, hasMessages, sendMessage } = args;
+  const suggestions = args.suggestions ?? DEFAULT_SUGGESTIONS;
+
+  // Slash-command catalog
+  const [slashCatalog, setSlashCatalog] = useState<SlashEntry[]>([]);
+  const [cursorRaw, setSlashCursor] = useState(0);
+  const slashListRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    let cancelled = false;
+    if (!window.electronAPI?.cliAgentListSkills) return;
+    window.electronAPI
+      .cliAgentListSkills({ cwd: vaultPath || undefined })
+      .then((entries) => {
+        if (!cancelled) setSlashCatalog(entries || []);
+      })
+      .catch(() => {
+        if (!cancelled) setSlashCatalog([]);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [vaultPath]);
+
+  const slashQuery = useMemo<string | null>(() => {
+    if (!cli.inputValue.startsWith("/")) return null;
+    const firstSpace = cli.inputValue.indexOf(" ");
+    return firstSpace === -1 ? cli.inputValue.slice(1) : null;
+  }, [cli.inputValue]);
+
+  const slashMatches = useMemo<SlashEntry[]>(() => {
+    if (slashQuery === null) return [];
+    const q = slashQuery.toLowerCase();
+    return slashCatalog
+      .filter((e) => e.name.toLowerCase().includes(q))
+      .slice(0, 8);
+  }, [slashCatalog, slashQuery]);
+
+  const slashOpen = slashQuery !== null && slashMatches.length > 0;
+  const activeCursor =
+    slashMatches.length === 0 ? 0 : cursorRaw % slashMatches.length;
+
+  const acceptSlash = useCallback(
+    (entry: SlashEntry) => {
+      const rest = cli.inputValue.includes(" ")
+        ? cli.inputValue.slice(cli.inputValue.indexOf(" "))
+        : "";
+      cli.setInputValue(`/${entry.name}${rest || " "}`);
+    },
+    [cli]
+  );
+
+  const onInputKeyDownIntercept = useCallback(
+    (e: React.KeyboardEvent<HTMLInputElement>): boolean => {
+      if (!slashOpen) return false;
+      if (e.key === "ArrowDown") {
+        e.preventDefault();
+        setSlashCursor((c) => (c + 1) % slashMatches.length);
+        return true;
+      }
+      if (e.key === "ArrowUp") {
+        e.preventDefault();
+        setSlashCursor(
+          (c) => (c - 1 + slashMatches.length) % slashMatches.length
+        );
+        return true;
+      }
+      if (e.key === "Tab" || (e.key === "Enter" && !e.shiftKey)) {
+        e.preventDefault();
+        const pick = slashMatches[activeCursor];
+        if (pick) acceptSlash(pick);
+        return true;
+      }
+      if (e.key === "Escape") {
+        e.preventDefault();
+        cli.setInputValue("");
+        return true;
+      }
+      return false;
+    },
+    [slashOpen, slashMatches, activeCursor, acceptSlash, cli]
+  );
+
+  // ── Header extras: vault badge + access-mode toggle ──────────────────
+  const headerExtras: ReactNode = (
+    <>
+      {vaultPath && (
+        <span
+          className="text-[10px] text-foreground-muted truncate max-w-32"
+          title={`Working in vault: ${vaultPath}`}
+        >
+          {vaultPath.split("/").pop() || vaultPath}
+        </span>
+      )}
+      <button
+        onClick={() => cli.setReadOnly(!cli.readOnly)}
+        className={cn(
+          "inline-flex items-center gap-1 text-[10px] px-1.5 py-0.5 rounded-md border transition-colors",
+          cli.readOnly
+            ? "border-border text-foreground-muted"
+            : "border-accent/40 text-accent bg-accent/5"
+        )}
+        title={
+          cli.readOnly
+            ? "Read-only: agent can only read vault files"
+            : "Full access: agent can read, write, and edit"
+        }
+        disabled={agentState !== "idle"}
+      >
+        {cli.readOnly ? <Eye size={10} /> : <FileEdit size={10} />}
+        {cli.readOnly ? "Read-only" : "Full access"}
+      </button>
+    </>
+  );
+
+  // ── Above-input: autocomplete dropdown + tip strip ───────────────────
+  const aboveInput: ReactNode = (
+    <>
+      {slashOpen && (
+        <div
+          ref={slashListRef}
+          className="absolute left-3 right-3 bottom-full mb-1 z-20 max-h-60 overflow-y-auto rounded-lg border border-border bg-surface-1 dark:bg-surface-2 shadow-lg"
+        >
+          <div className="px-3 py-1.5 text-[10px] uppercase tracking-wide text-foreground-muted border-b border-border bg-surface-2/40">
+            Slash commands · {slashMatches.length} match
+            {slashMatches.length === 1 ? "" : "es"}
+          </div>
+          {slashMatches.map((entry, idx) => {
+            const Icon = entry.kind === "skill" ? Wand2 : FileCode;
+            const isActive = idx === activeCursor;
+            return (
+              <button
+                key={entry.name}
+                type="button"
+                onMouseDown={(e) => {
+                  e.preventDefault();
+                  acceptSlash(entry);
+                }}
+                onMouseEnter={() => setSlashCursor(idx)}
+                className={cn(
+                  "w-full flex items-center gap-2 px-3 py-1.5 text-left text-[12px] transition-colors",
+                  isActive
+                    ? "bg-accent/10 text-foreground"
+                    : "text-foreground/80 hover:bg-foreground/5"
+                )}
+              >
+                <Icon
+                  size={11}
+                  className={cn(
+                    "shrink-0",
+                    entry.kind === "skill" ? "text-accent" : "text-primary"
+                  )}
+                />
+                <span className="font-mono">/{entry.name}</span>
+                <span className="ml-auto text-[10px] text-foreground-muted shrink-0">
+                  {entry.kind}
+                  {entry.source === "project" ? " · project" : ""}
+                </span>
+              </button>
+            );
+          })}
+          <div className="px-3 py-1 text-[10px] text-foreground-muted border-t border-border bg-surface-2/30">
+            ↑↓ navigate · Tab/Enter to insert · Esc to clear
+          </div>
+        </div>
+      )}
+      {agentState === "idle" && !slashOpen && hasMessages && (
+        <div className="px-4 pt-1.5 text-[10px] text-foreground-muted/70 select-none">
+          Tip: type{" "}
+          <code className="px-1 py-0.5 rounded bg-foreground/5 text-foreground-muted">
+            /
+          </code>{" "}
+          to browse{" "}
+          {slashCatalog.length > 0 ? `${slashCatalog.length} ` : ""}
+          installed Claude Code skills.
+        </div>
+      )}
+      {cli.preflightState === "blocked" && cli.preflightErrors.length > 0 && (
+        <div className="px-4 py-2 border-t border-border bg-amber-50 dark:bg-amber-950/30 text-[11px] flex flex-col gap-1">
+          {cli.preflightErrors.map((err) => (
+            <div
+              key={err.code}
+              className="flex items-start gap-1.5 text-amber-900 dark:text-amber-200"
+            >
+              <AlertCircle size={11} className="mt-0.5 shrink-0" />
+              <span>{err.message}</span>
+            </div>
+          ))}
+          <button
+            onClick={cli.rerunPreflight}
+            className="self-start mt-1 text-[10px] text-accent hover:underline"
+          >
+            Re-check
+          </button>
+        </div>
+      )}
+    </>
+  );
+
+  // ── Empty state: suggestion chips ────────────────────────────────────
+  const canStart =
+    cli.preflightState === "ok" || cli.preflightState === "unknown";
+  const emptyState: ReactNode = (
+    <div className="flex flex-col items-center justify-center h-full px-6 text-center">
+      <Sparkles size={20} className="text-accent mb-3" />
+      <p className="text-xs text-foreground/70 mb-1">
+        Ready to dig into this meeting
+      </p>
+      {cli.preflightBinaryVersion && cli.preflightState === "ok" && (
+        <p className="text-[10px] text-foreground-muted mb-3 flex items-center gap-1.5">
+          <CheckCircle2 size={10} className="text-emerald-600" />
+          Claude {cli.preflightBinaryVersion}
+          {cli.preflightVaultOk && (
+            <>
+              <span className="mx-1">·</span>
+              <CheckCircle2 size={10} className="text-emerald-600" />
+              Vault OK
+            </>
+          )}
+        </p>
+      )}
+      {canStart ? (
+        <div className="flex flex-wrap gap-1.5 justify-center max-w-xs">
+          {suggestions.map((s) => (
+            <button
+              key={s.label}
+              onClick={() => sendMessage(s.prompt)}
+              className={cn(
+                "px-3 py-1 rounded-full border text-[11px] transition-colors",
+                "border-border text-foreground/80",
+                "hover:border-accent/40 hover:text-accent hover:bg-accent/5"
+              )}
+            >
+              {s.label}
+            </button>
+          ))}
+        </div>
+      ) : (
+        <p className="text-[10px] text-foreground-muted max-w-xs">
+          Resolve the issue above to start the agent, or type your own
+          message below.
+        </p>
+      )}
+      <p className="text-[10px] text-foreground-muted/60 mt-4 max-w-xs">
+        Or type{" "}
+        <code className="px-1 py-0.5 rounded bg-foreground/5">/</code> to run
+        any of your installed Claude Code skills.
+      </p>
+    </div>
+  );
+
+  return {
+    headerExtras,
+    aboveInput,
+    emptyState,
+    onInputKeyDownIntercept,
+  };
+}

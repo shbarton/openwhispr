@@ -10,8 +10,8 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import type {
   CliAgentBackendEvent,
   CliAgentPreflightResult,
-} from "../../types/electron";
-import type { AgentState, Message, ToolCallInfo } from "../chat/types";
+} from "../types/electron";
+import type { AgentState, Message, ToolCallInfo } from "../components/chat/types";
 
 interface UseAgentBackendStreamOptions {
   systemPrompt: string;

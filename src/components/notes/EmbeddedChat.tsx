@@ -34,6 +34,21 @@ interface EmbeddedChatProps {
   activeConversationId?: number | null;
   onSwitchConversation?: (id: number) => void;
   onNewChat?: () => void;
+  /**
+   * Optional slots used by the CLI-backed flow for meeting notes. Stay
+   * undefined for the regular API-backed flow so it doesn't see any of this.
+   */
+  headerExtras?: React.ReactNode;
+  /** Rendered above the input (autocomplete dropdown, tip strip, etc). */
+  aboveInput?: React.ReactNode;
+  /** Rendered in place of the messages list when there are no messages yet. */
+  emptyStateOverride?: React.ReactNode;
+  /** Controlled-mode input value (when defined, parent owns it). */
+  inputValue?: string;
+  onInputValueChange?: (text: string) => void;
+  onInputKeyDownIntercept?: (
+    e: React.KeyboardEvent<HTMLInputElement>
+  ) => boolean;
 }
 
 function EmptyState() {
@@ -64,6 +79,12 @@ export default function EmbeddedChat({
   activeConversationId,
   onSwitchConversation,
   onNewChat,
+  headerExtras,
+  aboveInput,
+  emptyStateOverride,
+  inputValue,
+  onInputValueChange,
+  onInputKeyDownIntercept,
 }: EmbeddedChatProps) {
   const { t } = useTranslation();
 
@@ -152,6 +173,9 @@ export default function EmbeddedChat({
     >
       {headerTitle}
       <div className="flex-1" />
+      {headerExtras && (
+        <div className="flex items-center gap-1 mr-1">{headerExtras}</div>
+      )}
       <div className="flex items-center gap-0.5">
         {mode === "floating" ? (
           <button
@@ -185,14 +209,24 @@ export default function EmbeddedChat({
     <>
       {header}
       <div className="flex-1 min-h-0 flex flex-col **:data-chat-bubble:max-w-full">
-        <ChatMessages messages={messages} emptyState={<EmptyState />} onOpenNote={handleOpenNote} />
+        <ChatMessages
+          messages={messages}
+          emptyState={emptyStateOverride ?? <EmptyState />}
+          onOpenNote={handleOpenNote}
+        />
       </div>
-      <ChatInput
-        agentState={agentState}
-        partialTranscript=""
-        onTextSubmit={onTextSubmit}
-        onCancel={onCancel}
-      />
+      <div className="shrink-0 relative">
+        {aboveInput}
+        <ChatInput
+          agentState={agentState}
+          partialTranscript=""
+          onTextSubmit={onTextSubmit}
+          onCancel={onCancel}
+          value={inputValue}
+          onValueChange={onInputValueChange}
+          onKeyDownIntercept={onInputKeyDownIntercept}
+        />
+      </div>
     </>
   );
 

@@ -33,6 +33,8 @@ import ActionProcessingOverlay from "./ActionProcessingOverlay";
 import NoteBottomBar from "./NoteBottomBar";
 import EmbeddedChat, { type EmbeddedChatMode } from "./EmbeddedChat";
 import { useEmbeddedChat } from "../../hooks/useEmbeddedChat";
+import MeetingEmbeddedChat from "./MeetingEmbeddedChat";
+import { useSettingsStore } from "../../stores/settingsStore";
 import { normalizeDbDate } from "../../utils/dateFormatting";
 import { parseTranscriptSegments } from "../../utils/parseTranscriptSegments";
 import {
@@ -168,6 +170,11 @@ export default function NoteEditor({
     noteContent: note.content,
     noteTranscript: note.transcript ?? undefined,
   });
+  const agentEnabled = useSettingsStore((s) => s.agentEnabled);
+  // Meeting notes with the agent enabled use the CLI-backed embedded chat
+  // (Claude Code subprocess) — everything else stays on the existing
+  // Vercel-AI-SDK-backed flow above.
+  const useCliChat = note.note_type === "meeting" && agentEnabled;
   const titleRef = useRef<HTMLDivElement>(null);
   const prevNoteIdRef = useRef<number>(note.id);
   const autoShowDoneRef = useRef(false);
@@ -931,36 +938,50 @@ export default function NoteEditor({
             actionPicker={isRecording ? undefined : actionPicker}
             hideInput={chatMode !== "hidden"}
           />
-          {chatMode === "floating" && (
-            <EmbeddedChat
-              mode="floating"
-              onModeChange={setChatMode}
-              messages={embeddedChat.messages}
-              agentState={embeddedChat.agentState}
-              onTextSubmit={embeddedChat.sendMessage}
-              onCancel={embeddedChat.cancelStream}
-              noteConversations={embeddedChat.noteConversations}
-              activeConversationId={embeddedChat.activeConversationId}
-              onSwitchConversation={embeddedChat.switchConversation}
-              onNewChat={embeddedChat.startNewChat}
-            />
-          )}
+          {chatMode === "floating" &&
+            (useCliChat ? (
+              <MeetingEmbeddedChat
+                note={note}
+                mode="floating"
+                onModeChange={setChatMode}
+              />
+            ) : (
+              <EmbeddedChat
+                mode="floating"
+                onModeChange={setChatMode}
+                messages={embeddedChat.messages}
+                agentState={embeddedChat.agentState}
+                onTextSubmit={embeddedChat.sendMessage}
+                onCancel={embeddedChat.cancelStream}
+                noteConversations={embeddedChat.noteConversations}
+                activeConversationId={embeddedChat.activeConversationId}
+                onSwitchConversation={embeddedChat.switchConversation}
+                onNewChat={embeddedChat.startNewChat}
+              />
+            ))}
         </div>
       </div>
-      {chatMode === "sidebar" && (
-        <EmbeddedChat
-          mode="sidebar"
-          onModeChange={setChatMode}
-          messages={embeddedChat.messages}
-          agentState={embeddedChat.agentState}
-          onTextSubmit={embeddedChat.sendMessage}
-          onCancel={embeddedChat.cancelStream}
-          noteConversations={embeddedChat.noteConversations}
-          activeConversationId={embeddedChat.activeConversationId}
-          onSwitchConversation={embeddedChat.switchConversation}
-          onNewChat={embeddedChat.startNewChat}
-        />
-      )}
+      {chatMode === "sidebar" &&
+        (useCliChat ? (
+          <MeetingEmbeddedChat
+            note={note}
+            mode="sidebar"
+            onModeChange={setChatMode}
+          />
+        ) : (
+          <EmbeddedChat
+            mode="sidebar"
+            onModeChange={setChatMode}
+            messages={embeddedChat.messages}
+            agentState={embeddedChat.agentState}
+            onTextSubmit={embeddedChat.sendMessage}
+            onCancel={embeddedChat.cancelStream}
+            noteConversations={embeddedChat.noteConversations}
+            activeConversationId={embeddedChat.activeConversationId}
+            onSwitchConversation={embeddedChat.switchConversation}
+            onNewChat={embeddedChat.startNewChat}
+          />
+        ))}
     </div>
   );
 }
