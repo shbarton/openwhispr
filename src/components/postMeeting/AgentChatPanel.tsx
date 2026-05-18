@@ -66,6 +66,11 @@ Meeting metadata:
 
 ${vaultSection}
 
+The user can also invoke any of their installed slash commands (e.g.
+\`/recall\`, \`/research\`, \`/generate-slides\`, \`/tour\`) directly in the
+chat — just run them as you would in a normal Claude Code session if they
+type one.
+
 The meeting transcript lives on disk as a plain-text file (one segment per
 line, formatted like "[HH:MM] speaker: text"). Use the Read tool with the
 path the user gives you to access it.
@@ -246,12 +251,20 @@ export default function AgentChatPanel({
     >
       {/* Header */}
       <div className="flex items-center justify-between px-4 py-2.5 border-b border-border bg-surface-2/40 dark:bg-surface-3/30">
-        <div className="flex items-center gap-2 text-sm font-medium text-foreground">
-          <Sparkles size={14} className="text-accent" />
+        <div className="flex items-center gap-2 text-sm font-medium text-foreground min-w-0">
+          <Sparkles size={14} className="text-accent shrink-0" />
           <span>AI Assistant</span>
           {stream.agentState !== "idle" && (
-            <span className="text-xs text-foreground-muted">
+            <span className="text-xs text-foreground-muted shrink-0">
               · {stream.agentState}
+            </span>
+          )}
+          {vaultPath && (
+            <span
+              className="text-[11px] text-foreground-muted truncate"
+              title={`Working in vault: ${vaultPath}`}
+            >
+              · {vaultPath.split("/").pop() || vaultPath}
             </span>
           )}
         </div>
@@ -380,6 +393,23 @@ export default function AgentChatPanel({
             </div>
           )}
           <div className="shrink-0 border-t border-border">
+            {stream.agentState === "idle" && (
+              <div className="px-4 pt-1.5 text-[10px] text-foreground-muted/70 select-none">
+                Tip: type{" "}
+                <code className="px-1 py-0.5 rounded bg-foreground/5 text-foreground-muted">
+                  /
+                </code>{" "}
+                to run any of your installed Claude Code skills (e.g.{" "}
+                <code className="px-1 py-0.5 rounded bg-foreground/5">
+                  /recall
+                </code>
+                ,{" "}
+                <code className="px-1 py-0.5 rounded bg-foreground/5">
+                  /generate-slides
+                </code>
+                ).
+              </div>
+            )}
             <ChatInput
               agentState={stream.agentState}
               partialTranscript=""
