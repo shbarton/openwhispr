@@ -592,18 +592,19 @@ export default function NoteEditor({
   const handleAskSubmit = useCallback(
     (text: string) => {
       if (chatMode === "hidden") {
-        setChatMode("floating");
+        // Meeting notes never use floating — they go straight to sidebar.
+        setChatMode(useCliChat ? "sidebar" : "floating");
       }
       embeddedChat.sendMessage(text);
     },
-    [chatMode, embeddedChat]
+    [chatMode, embeddedChat, useCliChat]
   );
 
   const handleChatInputFocus = useCallback(() => {
     if (chatMode === "hidden") {
-      setChatMode("floating");
+      setChatMode(useCliChat ? "sidebar" : "floating");
     }
-  }, [chatMode]);
+  }, [chatMode, useCliChat]);
 
   const noteDate = formatNoteDate(note.created_at);
   const shortDate = formatShortDate(note.created_at);
@@ -882,7 +883,15 @@ export default function NoteEditor({
 
           {/* Inline metadata row for meeting notes */}
           {note.note_type === "meeting" && onNoteMetadataUpdate && (
-            <MeetingMetadataRow note={note} onUpdate={onNoteMetadataUpdate} />
+            <MeetingMetadataRow
+              note={note}
+              onUpdate={onNoteMetadataUpdate}
+              onOpenChat={
+                useCliChat && chatMode === "hidden"
+                  ? () => setChatMode("sidebar")
+                  : undefined
+              }
+            />
           )}
         </div>
 
@@ -956,29 +965,29 @@ export default function NoteEditor({
             onAskSubmit={handleAskSubmit}
             onInputFocus={handleChatInputFocus}
             actionPicker={isRecording ? undefined : actionPicker}
-            hideInput={chatMode !== "hidden"}
+            // For meeting notes, the bottom "Ask anything" affordance is
+            // suppressed entirely — chat is sidebar-or-hidden, never a
+            // bottom-bar collapsed form. For other notes, hide while the
+            // chat panel is open as before.
+            hideInput={useCliChat || chatMode !== "hidden"}
           />
-          {chatMode === "floating" &&
-            (useCliChat ? (
-              <MeetingEmbeddedChat
-                note={note}
-                mode="floating"
-                onModeChange={setChatMode}
-              />
-            ) : (
-              <EmbeddedChat
-                mode="floating"
-                onModeChange={setChatMode}
-                messages={embeddedChat.messages}
-                agentState={embeddedChat.agentState}
-                onTextSubmit={embeddedChat.sendMessage}
-                onCancel={embeddedChat.cancelStream}
-                noteConversations={embeddedChat.noteConversations}
-                activeConversationId={embeddedChat.activeConversationId}
-                onSwitchConversation={embeddedChat.switchConversation}
-                onNewChat={embeddedChat.startNewChat}
-              />
-            ))}
+          {/* Floating mode is only used by the API-backed flow. Meeting
+              notes never enter floating — they coerce to sidebar in the
+              hooks above, but guard here too. */}
+          {!useCliChat && chatMode === "floating" && (
+            <EmbeddedChat
+              mode="floating"
+              onModeChange={setChatMode}
+              messages={embeddedChat.messages}
+              agentState={embeddedChat.agentState}
+              onTextSubmit={embeddedChat.sendMessage}
+              onCancel={embeddedChat.cancelStream}
+              noteConversations={embeddedChat.noteConversations}
+              activeConversationId={embeddedChat.activeConversationId}
+              onSwitchConversation={embeddedChat.switchConversation}
+              onNewChat={embeddedChat.startNewChat}
+            />
+          )}
         </div>
       </div>
       {chatMode === "sidebar" &&

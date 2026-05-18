@@ -1,6 +1,16 @@
 import { useState, useEffect, useCallback, useMemo, useRef } from "react";
 import { useTranslation } from "react-i18next";
-import { Folder, Tag, Users, FileText, X, Search, Check, ChevronDown } from "lucide-react";
+import {
+  Folder,
+  Tag,
+  Users,
+  FileText,
+  X,
+  Search,
+  Check,
+  ChevronDown,
+  MessageSquare,
+} from "lucide-react";
 import { Popover, PopoverTrigger, PopoverContent } from "../ui/popover";
 import { cn } from "../lib/utils";
 import type { NoteItem, VaultMetadata } from "../../types/electron";
@@ -11,6 +21,13 @@ import { useNotes } from "../../stores/noteStore";
 interface MeetingMetadataRowProps {
   note: NoteItem;
   onUpdate: (updates: Partial<NoteItem>) => void;
+  /**
+   * Optional "open AI assistant" affordance. Only rendered when defined.
+   * NoteEditor passes this for meeting notes with the agent enabled when
+   * the chat panel is currently hidden, so the user has a way to bring
+   * it back without leaving the note.
+   */
+  onOpenChat?: () => void;
 }
 
 /**
@@ -19,7 +36,11 @@ interface MeetingMetadataRowProps {
  * that open popovers for editing. Changes save immediately (except description
  * which is debounced).
  */
-export default function MeetingMetadataRow({ note, onUpdate }: MeetingMetadataRowProps) {
+export default function MeetingMetadataRow({
+  note,
+  onUpdate,
+  onOpenChat,
+}: MeetingMetadataRowProps) {
   const { t } = useTranslation();
   const notes = useNotes();
 
@@ -68,6 +89,21 @@ export default function MeetingMetadataRow({ note, onUpdate }: MeetingMetadataRo
             onUpdate({ participants: JSON.stringify(updated) })
           }
         />
+
+        {onOpenChat && (
+          <>
+            <span className="text-foreground/15 dark:text-foreground/10 text-xs">·</span>
+            <button
+              type="button"
+              onClick={onOpenChat}
+              className="inline-flex items-center gap-1 text-[11px] px-1.5 py-0.5 rounded-md text-foreground-muted hover:text-foreground hover:bg-foreground/5 transition-colors outline-none"
+              title="Open AI assistant"
+            >
+              <MessageSquare size={11} className="shrink-0" />
+              <span>AI assistant</span>
+            </button>
+          </>
+        )}
       </div>
 
       {/* Secondary row: Description (if present or being edited) */}

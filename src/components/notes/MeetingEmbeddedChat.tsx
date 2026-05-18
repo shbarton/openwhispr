@@ -61,6 +61,13 @@ export default function MeetingEmbeddedChat({
 
   const transcript = useMemo(() => transcriptPlainText(note), [note]);
 
+  // Meeting notes only support sidebar ↔ hidden. The PanelRight button in
+  // EmbeddedChat's header tries to flip into floating; coerce that to
+  // sidebar (no-op if already there) so the chat never overlays the note.
+  const handleModeChange = (next: EmbeddedChatMode) => {
+    onModeChange(next === "floating" ? "sidebar" : next);
+  };
+
   const chat = useEmbeddedChatCli({
     noteId: note.id,
     noteTitle: note.title || "Untitled meeting",
@@ -81,7 +88,7 @@ export default function MeetingEmbeddedChat({
   return (
     <EmbeddedChat
       mode={mode}
-      onModeChange={onModeChange}
+      onModeChange={handleModeChange}
       messages={chat.messages}
       agentState={chat.agentState}
       onTextSubmit={chat.sendMessage}
