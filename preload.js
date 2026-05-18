@@ -746,6 +746,8 @@ contextBridge.exposeInMainWorld("electronAPI", {
   onAgentStreamEnd: registerListener("cloud-agent-stream-end", (callback) => () => callback()),
 
   // CLI Agent (post-meeting Claude subprocess)
+  cliAgentListSkills: (opts) =>
+    ipcRenderer.invoke("cli-agent-list-skills", opts),
   cliAgentPrepareMeeting: (payload) =>
     ipcRenderer.invoke("cli-agent-prepare-meeting", payload),
   cliAgentPreflight: (opts) => ipcRenderer.invoke("cli-agent-preflight", opts),

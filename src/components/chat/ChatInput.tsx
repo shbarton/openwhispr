@@ -10,6 +10,20 @@ interface ChatInputProps {
   onTextSubmit?: (text: string) => void;
   onCancel?: () => void;
   autoFocus?: boolean;
+  /**
+   * Optional controlled-mode props. When `value` is defined the input is
+   * fully controlled by the parent; `onValueChange` fires on every keystroke.
+   * When `value` is undefined, the component manages its own state and
+   * `onValueChange` (if provided) is still fired as a notification.
+   */
+  value?: string;
+  onValueChange?: (text: string) => void;
+  /**
+   * Optional keydown hook fired BEFORE the component's own handler. Return
+   * true from this to indicate you handled the event (the component will
+   * skip its own logic). Used to wire up autocomplete keyboard navigation.
+   */
+  onKeyDownIntercept?: (e: React.KeyboardEvent<HTMLInputElement>) => boolean;
 }
 
 function RecordingIndicator() {
@@ -46,10 +60,26 @@ export function ChatInput({
   onTextSubmit,
   onCancel,
   autoFocus = false,
+  value,
+  onValueChange,
+  onKeyDownIntercept,
 }: ChatInputProps) {
   const { t } = useTranslation();
-  const [inputText, setInputText] = useState("");
+  const [internalText, setInternalText] = useState("");
   const inputRef = useRef<HTMLInputElement>(null);
+
+  const isControlled = value !== undefined;
+  const inputText = isControlled ? value! : internalText;
+
+  const setInputText = useCallback(
+    (next: string) => {
+      if (!isControlled) {
+        setInternalText(next);
+      }
+      onValueChange?.(next);
+    },
+    [isControlled, onValueChange]
+  );
 
   const handleSubmit = useCallback(() => {
     const text = inputText.trim();
@@ -57,16 +87,17 @@ export function ChatInput({
     onTextSubmit(text);
     setInputText("");
     requestAnimationFrame(() => inputRef.current?.focus());
-  }, [inputText, onTextSubmit]);
+  }, [inputText, onTextSubmit, setInputText]);
 
   const handleKeyDown = useCallback(
     (e: React.KeyboardEvent<HTMLInputElement>) => {
+      if (onKeyDownIntercept && onKeyDownIntercept(e)) return;
       if (e.key === "Enter" && !e.shiftKey) {
         e.preventDefault();
         handleSubmit();
       }
     },
-    [handleSubmit]
+    [handleSubmit, onKeyDownIntercept]
   );
 
   const isIdle = agentState === "idle";

@@ -5803,6 +5803,70 @@ class IPCHandlers {
     // CLI Agent (post-meeting Claude subprocess)
     // ─────────────────────────────────────────────────────────────────────
     //
+    // Enumerate the user's installed Claude Code slash commands and skills
+    // so the renderer can render an autocomplete dropdown when the user
+    // types `/`. Reads from ~/.claude/{skills,commands}/ (and the cwd's
+    // .claude variants if a vault is provided).
+    ipcMain.handle(
+      "cli-agent-list-skills",
+      async (_event, { cwd } = {}) => {
+        const skills = new Map(); // name → { source: "user"|"project", kind: "skill"|"command" }
+
+        const tryReadDir = async (dir, source, kind) => {
+          try {
+            const entries = await fs.promises.readdir(dir, {
+              withFileTypes: true,
+            });
+            for (const entry of entries) {
+              let name = null;
+              if (kind === "skill" && entry.isDirectory()) {
+                // Skill directories contain SKILL.md
+                const skillFile = path.join(dir, entry.name, "SKILL.md");
+                try {
+                  await fs.promises.access(skillFile);
+                  name = entry.name;
+                } catch {
+                  // skip — directory without SKILL.md
+                }
+              } else if (
+                kind === "command" &&
+                entry.isFile() &&
+                entry.name.endsWith(".md")
+              ) {
+                name = entry.name.replace(/\.md$/, "");
+              }
+              if (name && !name.startsWith("_") && !skills.has(name)) {
+                skills.set(name, { source, kind });
+              }
+            }
+          } catch {
+            // dir doesn't exist — fine
+          }
+        };
+
+        const home = os.homedir();
+        await tryReadDir(path.join(home, ".claude", "commands"), "user", "command");
+        await tryReadDir(path.join(home, ".claude", "skills"), "user", "skill");
+
+        if (cwd && typeof cwd === "string") {
+          await tryReadDir(
+            path.join(cwd, ".claude", "commands"),
+            "project",
+            "command"
+          );
+          await tryReadDir(
+            path.join(cwd, ".claude", "skills"),
+            "project",
+            "skill"
+          );
+        }
+
+        return Array.from(skills.entries())
+          .map(([name, meta]) => ({ name, ...meta }))
+          .sort((a, b) => a.name.localeCompare(b.name));
+      }
+    );
+
     // Persist the meeting transcript to disk so the agent can Read it instead
     // of stuffing the whole blob into the first message. Returns the absolute
     // file path and the directory that needs to be added to the agent's

@@ -6,14 +6,28 @@
  * the agent is started, per Codex review (no auto-spawn).
  */
 
-import { useCallback, useEffect, useState } from "react";
-import { Sparkles, AlertCircle, CheckCircle2, FileEdit, Eye } from "lucide-react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import {
+  Sparkles,
+  AlertCircle,
+  CheckCircle2,
+  FileEdit,
+  Eye,
+  Wand2,
+  FileCode,
+} from "lucide-react";
 import { ChatMessages } from "../chat/ChatMessages";
 import { ChatInput } from "../chat/ChatInput";
 import { useAgentBackendStream } from "./useAgentBackendStream";
 import { useSettingsStore } from "../../stores/settingsStore";
 import type { CliAgentPreflightResult } from "../../types/electron";
 import { cn } from "../lib/utils";
+
+interface SlashEntry {
+  name: string;
+  source: "user" | "project";
+  kind: "skill" | "command";
+}
 
 interface AgentChatPanelProps {
   /** Title of the meeting (used in system prompt). */
@@ -154,6 +168,12 @@ export default function AgentChatPanel({
   const [transcriptPath, setTranscriptPath] = useState<string | null>(null);
   const [transcriptDir, setTranscriptDir] = useState<string | null>(null);
 
+  // Slash-command autocomplete
+  const [inputValue, setInputValue] = useState("");
+  const [slashCatalog, setSlashCatalog] = useState<SlashEntry[]>([]);
+  const [slashCursor, setSlashCursor] = useState(0);
+  const slashListRef = useRef<HTMLDivElement>(null);
+
   const systemPrompt = buildSystemPrompt(
     meetingTitle,
     meetingDate,
@@ -186,6 +206,90 @@ export default function AgentChatPanel({
     runPreflight();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
+
+  // Fetch slash-command catalog once. Refreshes when the vault path changes
+  // because project-level skills can change.
+  useEffect(() => {
+    let cancelled = false;
+    if (!window.electronAPI?.cliAgentListSkills) return;
+    window.electronAPI
+      .cliAgentListSkills({ cwd: vaultPath || undefined })
+      .then((entries) => {
+        if (!cancelled) setSlashCatalog(entries || []);
+      })
+      .catch(() => {
+        if (!cancelled) setSlashCatalog([]);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [vaultPath]);
+
+  // Slash-command matching. Trigger when the input starts with "/" and we
+  // haven't passed any whitespace yet.
+  const slashQuery = useMemo<string | null>(() => {
+    if (!inputValue.startsWith("/")) return null;
+    const firstSpace = inputValue.indexOf(" ");
+    const term = firstSpace === -1 ? inputValue.slice(1) : null;
+    return term;
+  }, [inputValue]);
+
+  const slashMatches = useMemo<SlashEntry[]>(() => {
+    if (slashQuery === null) return [];
+    const q = slashQuery.toLowerCase();
+    return slashCatalog
+      .filter((e) => e.name.toLowerCase().includes(q))
+      .slice(0, 8);
+  }, [slashCatalog, slashQuery]);
+
+  const slashOpen = slashQuery !== null && slashMatches.length > 0;
+
+  // Reset cursor when the match set changes
+  useEffect(() => {
+    setSlashCursor(0);
+  }, [slashQuery, slashMatches.length]);
+
+  const acceptSlash = useCallback(
+    (entry: SlashEntry) => {
+      // Replace the leading "/<query>" segment with "/<name> "
+      const rest = inputValue.includes(" ")
+        ? inputValue.slice(inputValue.indexOf(" "))
+        : "";
+      setInputValue(`/${entry.name}${rest || " "}`);
+    },
+    [inputValue]
+  );
+
+  const handleInputKeyDown = useCallback(
+    (e: React.KeyboardEvent<HTMLInputElement>): boolean => {
+      if (!slashOpen) return false;
+      if (e.key === "ArrowDown") {
+        e.preventDefault();
+        setSlashCursor((c) => (c + 1) % slashMatches.length);
+        return true;
+      }
+      if (e.key === "ArrowUp") {
+        e.preventDefault();
+        setSlashCursor(
+          (c) => (c - 1 + slashMatches.length) % slashMatches.length
+        );
+        return true;
+      }
+      if (e.key === "Tab" || (e.key === "Enter" && !e.shiftKey)) {
+        e.preventDefault();
+        const pick = slashMatches[slashCursor];
+        if (pick) acceptSlash(pick);
+        return true;
+      }
+      if (e.key === "Escape") {
+        e.preventDefault();
+        setInputValue("");
+        return true;
+      }
+      return false;
+    },
+    [slashOpen, slashMatches, slashCursor, acceptSlash]
+  );
 
   const handleStart = useCallback(async () => {
     if (preflightStatus !== "ok" && preflightStatus !== "blocked") return;
@@ -392,22 +496,72 @@ export default function AgentChatPanel({
               </span>
             </div>
           )}
-          <div className="shrink-0 border-t border-border">
-            {stream.agentState === "idle" && (
+          <div className="shrink-0 border-t border-border relative">
+            {/* Slash-command autocomplete */}
+            {slashOpen && (
+              <div
+                ref={slashListRef}
+                className="absolute left-3 right-3 bottom-full mb-1 z-20 max-h-60 overflow-y-auto rounded-lg border border-border bg-surface-1 dark:bg-surface-2 shadow-lg"
+              >
+                <div className="px-3 py-1.5 text-[10px] uppercase tracking-wide text-foreground-muted border-b border-border bg-surface-2/40">
+                  Slash commands · {slashMatches.length} match
+                  {slashMatches.length === 1 ? "" : "es"}
+                </div>
+                {slashMatches.map((entry, idx) => {
+                  const Icon = entry.kind === "skill" ? Wand2 : FileCode;
+                  const isActive = idx === slashCursor;
+                  return (
+                    <button
+                      key={entry.name}
+                      type="button"
+                      onMouseDown={(e) => {
+                        // mousedown so the input's focus doesn't blur first
+                        e.preventDefault();
+                        acceptSlash(entry);
+                      }}
+                      onMouseEnter={() => setSlashCursor(idx)}
+                      className={cn(
+                        "w-full flex items-center gap-2 px-3 py-1.5 text-left text-[12px]",
+                        "transition-colors",
+                        isActive
+                          ? "bg-accent/10 text-foreground"
+                          : "text-foreground/80 hover:bg-foreground/5"
+                      )}
+                    >
+                      <Icon
+                        size={11}
+                        className={cn(
+                          "shrink-0",
+                          entry.kind === "skill"
+                            ? "text-accent"
+                            : "text-primary"
+                        )}
+                      />
+                      <span className="font-mono">/{entry.name}</span>
+                      <span className="ml-auto text-[10px] text-foreground-muted shrink-0">
+                        {entry.kind}
+                        {entry.source === "project" ? " · project" : ""}
+                      </span>
+                    </button>
+                  );
+                })}
+                <div className="px-3 py-1 text-[10px] text-foreground-muted border-t border-border bg-surface-2/30">
+                  ↑↓ navigate · Tab/Enter to insert · Esc to clear
+                </div>
+              </div>
+            )}
+
+            {stream.agentState === "idle" && !slashOpen && (
               <div className="px-4 pt-1.5 text-[10px] text-foreground-muted/70 select-none">
                 Tip: type{" "}
                 <code className="px-1 py-0.5 rounded bg-foreground/5 text-foreground-muted">
                   /
                 </code>{" "}
-                to run any of your installed Claude Code skills (e.g.{" "}
-                <code className="px-1 py-0.5 rounded bg-foreground/5">
-                  /recall
-                </code>
-                ,{" "}
-                <code className="px-1 py-0.5 rounded bg-foreground/5">
-                  /generate-slides
-                </code>
-                ).
+                to browse your{" "}
+                {slashCatalog.length > 0
+                  ? `${slashCatalog.length} installed Claude Code skills`
+                  : "installed Claude Code skills"}
+                .
               </div>
             )}
             <ChatInput
@@ -416,6 +570,9 @@ export default function AgentChatPanel({
               onTextSubmit={handleUserMessage}
               onCancel={handleCancel}
               autoFocus
+              value={inputValue}
+              onValueChange={setInputValue}
+              onKeyDownIntercept={handleInputKeyDown}
             />
           </div>
         </>

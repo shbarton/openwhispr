@@ -1456,6 +1456,13 @@ declare global {
       onAgentStreamEnd?: (callback: () => void) => () => void;
 
       // CLI Agent (post-meeting Claude subprocess)
+      cliAgentListSkills?: (opts?: { cwd?: string }) => Promise<
+        Array<{
+          name: string;
+          source: "user" | "project";
+          kind: "skill" | "command";
+        }>
+      >;
       cliAgentPrepareMeeting?: (payload: {
         noteId?: number | string;
         transcript: string;
