@@ -1,5 +1,5 @@
 import { useState, useRef, useCallback, useEffect } from "react";
-import { SendHorizontal, Square } from "lucide-react";
+import { ArrowUp, Square } from "lucide-react";
 import { useTranslation } from "react-i18next";
 import { cn } from "../lib/utils";
 import type { AgentState } from "./types";
@@ -23,7 +23,7 @@ interface ChatInputProps {
    * true from this to indicate you handled the event (the component will
    * skip its own logic). Used to wire up autocomplete keyboard navigation.
    */
-  onKeyDownIntercept?: (e: React.KeyboardEvent<HTMLInputElement>) => boolean;
+  onKeyDownIntercept?: (e: React.KeyboardEvent<HTMLTextAreaElement>) => boolean;
 }
 
 function RecordingIndicator() {
@@ -66,7 +66,7 @@ export function ChatInput({
 }: ChatInputProps) {
   const { t } = useTranslation();
   const [internalText, setInternalText] = useState("");
-  const inputRef = useRef<HTMLInputElement>(null);
+  const inputRef = useRef<HTMLTextAreaElement>(null);
 
   const isControlled = value !== undefined;
   const inputText = isControlled ? value! : internalText;
@@ -90,9 +90,10 @@ export function ChatInput({
   }, [inputText, onTextSubmit, setInputText]);
 
   const handleKeyDown = useCallback(
-    (e: React.KeyboardEvent<HTMLInputElement>) => {
+    (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
       if (onKeyDownIntercept && onKeyDownIntercept(e)) return;
-      if (e.key === "Enter" && !e.shiftKey) {
+      // Enter submits; Shift+Enter (or Cmd/Alt+Enter) inserts a newline.
+      if (e.key === "Enter" && !e.shiftKey && !e.metaKey && !e.altKey) {
         e.preventDefault();
         handleSubmit();
       }
@@ -116,7 +117,10 @@ export function ChatInput({
     <div className="shrink-0 px-3 pb-3 pt-1">
       <div
         className={cn(
-          "flex items-center gap-2 min-h-11 px-3 rounded-lg",
+          // items-end keeps the send button anchored at the bottom of
+          // the box as the textarea grows downward; min-h matches the
+          // previous single-line height.
+          "flex items-end gap-2 min-h-11 px-3 py-2 rounded-lg",
           "bg-surface-1 border border-border/30",
           "transition-colors duration-150",
           isIdle && "focus-within:border-primary/30"
@@ -141,51 +145,65 @@ export function ChatInput({
         )}
 
         {(isIdle || isBusy) && (
-          <div className="flex items-center gap-2 w-full">
-            <input
+          <div className="flex items-end gap-2 w-full">
+            <textarea
               ref={inputRef}
-              type="text"
+              rows={1}
               value={inputText}
               onChange={(e) => setInputText(e.target.value)}
               onKeyDown={handleKeyDown}
               disabled={isBusy}
               autoFocus={autoFocus}
               placeholder={t("agentMode.input.typeMessage")}
+              // field-sizing: content auto-grows the textarea to fit its
+              // content (Chromium 123+, Electron 41 supports it). The
+              // max-h cap (~6 lines) keeps it from eating the viewport.
+              style={{ fieldSizing: "content" } as React.CSSProperties}
               className={cn(
-                "input-inline flex-1 outline-none bg-transparent",
+                "input-inline flex-1 outline-none bg-transparent resize-none",
                 "text-[13px] text-foreground placeholder:text-muted-foreground/40",
-                "min-w-0 p-0",
+                "min-w-0 p-0 leading-snug",
+                "max-h-36 overflow-y-auto",
                 isBusy && "text-muted-foreground/30 cursor-not-allowed"
               )}
             />
-            {isBusy && onCancel ? (
-              <button
-                onClick={onCancel}
-                className={cn(
-                  "p-1 rounded-sm shrink-0",
-                  "text-muted-foreground/60 hover:text-foreground hover:bg-foreground/8",
-                  "focus:outline-none focus-visible:ring-1 focus-visible:ring-ring/30",
-                  "transition-colors duration-100"
-                )}
-              >
-                <Square size={12} className="fill-current" />
-              </button>
-            ) : isIdle ? (
-              <button
-                onClick={handleSubmit}
-                disabled={!inputText.trim()}
-                className={cn(
-                  "p-1 rounded-sm shrink-0",
-                  "focus:outline-none focus-visible:ring-1 focus-visible:ring-ring/30",
-                  "transition-colors duration-100",
-                  inputText.trim()
-                    ? "text-primary hover:text-primary/80"
-                    : "text-muted-foreground/25 cursor-default"
-                )}
-              >
-                <SendHorizontal size={14} />
-              </button>
-            ) : null}
+            {(() => {
+              const baseBtn =
+                "flex items-center justify-center w-7 h-7 rounded-full shrink-0 transition-all duration-150 focus:outline-none focus-visible:ring-1 focus-visible:ring-primary/40";
+              const activeFill =
+                "bg-primary text-primary-foreground hover:bg-primary/85 active:scale-95";
+
+              if (isBusy && onCancel) {
+                return (
+                  <button
+                    onClick={onCancel}
+                    aria-label={t("embeddedChat.stop", "Stop")}
+                    className={cn(baseBtn, activeFill)}
+                  >
+                    <Square size={11} className="fill-current" />
+                  </button>
+                );
+              }
+              if (isIdle) {
+                const hasText = inputText.trim().length > 0;
+                return (
+                  <button
+                    onClick={handleSubmit}
+                    disabled={!hasText}
+                    aria-label={t("embeddedChat.send", "Send")}
+                    className={cn(
+                      baseBtn,
+                      hasText
+                        ? activeFill
+                        : "bg-foreground/10 dark:bg-white/8 text-foreground/30 dark:text-foreground/25 cursor-default"
+                    )}
+                  >
+                    <ArrowUp size={14} strokeWidth={2.5} />
+                  </button>
+                );
+              }
+              return null;
+            })()}
           </div>
         )}
       </div>

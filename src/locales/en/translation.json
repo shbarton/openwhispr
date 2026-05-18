@@ -2436,6 +2436,7 @@
   "embeddedChat": {
     "askPlaceholder": "Ask anything...",
     "send": "Send",
+    "stop": "Stop",
     "title": "Chat",
     "emptyState": "Ask a question about this note",
     "dock": "Dock to sidebar",

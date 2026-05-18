@@ -90,7 +90,7 @@ export function useCliExtras(args: UseCliExtrasArgs): {
   aboveInput: ReactNode;
   emptyState: ReactNode;
   onInputKeyDownIntercept: (
-    e: React.KeyboardEvent<HTMLInputElement>
+    e: React.KeyboardEvent<HTMLTextAreaElement>
   ) => boolean;
 } {
   const { vaultPath, agentState, cli, hasMessages, sendMessage } = args;
@@ -146,7 +146,7 @@ export function useCliExtras(args: UseCliExtrasArgs): {
   );
 
   const onInputKeyDownIntercept = useCallback(
-    (e: React.KeyboardEvent<HTMLInputElement>): boolean => {
+    (e: React.KeyboardEvent<HTMLTextAreaElement>): boolean => {
       if (!slashOpen) return false;
       if (e.key === "ArrowDown") {
         e.preventDefault();

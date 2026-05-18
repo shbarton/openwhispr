@@ -47,7 +47,7 @@ interface EmbeddedChatProps {
   inputValue?: string;
   onInputValueChange?: (text: string) => void;
   onInputKeyDownIntercept?: (
-    e: React.KeyboardEvent<HTMLInputElement>
+    e: React.KeyboardEvent<HTMLTextAreaElement>
   ) => boolean;
 }
 
