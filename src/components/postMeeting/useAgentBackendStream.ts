@@ -56,6 +56,55 @@ function uuid(): string {
   return `s_${Date.now()}_${Math.random().toString(36).slice(2, 10)}`;
 }
 
+/**
+ * Translate a raw tool_end payload into a *short* display string.
+ *
+ * The CLI's Read/Glob/Grep tools return potentially huge blobs (whole file
+ * bodies with line numbers, full match lists). Rendering that verbatim in
+ * the chat is noise — the user already has the transcript in the left
+ * pane, and any vault reads can be re-done by the user. We collapse those
+ * to a one-liner like "Read · transcript.txt". Errors keep their full
+ * text. Other tools pass through (truncated to keep the header tame).
+ */
+function summarizeToolResult(
+  tc: ToolCallInfo,
+  output: string | undefined,
+  error: string | undefined
+): string | undefined {
+  if (error) return error;
+  if (!output) return undefined;
+
+  const isBulkRead =
+    tc.name === "Read" || tc.name === "Glob" || tc.name === "Grep";
+  if (!isBulkRead) {
+    return output.length > 200 ? output.slice(0, 200) + "…" : output;
+  }
+
+  let args: Record<string, unknown> = {};
+  try {
+    args = JSON.parse(tc.arguments || "{}");
+  } catch {
+    /* ignore */
+  }
+  const filePath =
+    typeof args.file_path === "string"
+      ? (args.file_path as string)
+      : typeof args.path === "string"
+        ? (args.path as string)
+        : null;
+  const pattern =
+    typeof args.pattern === "string" ? (args.pattern as string) : null;
+
+  if (filePath) {
+    const base = filePath.split("/").pop() || filePath;
+    return `${tc.name} · ${base}`;
+  }
+  if (pattern) {
+    return `${tc.name} · "${pattern}"`;
+  }
+  return tc.name;
+}
+
 export function useAgentBackendStream(
   opts: UseAgentBackendStreamOptions
 ): UseAgentBackendStreamResult {
@@ -180,7 +229,10 @@ export function useAgentBackendStream(
         );
         break;
       }
-      case "tool_end": {
+      case "tool_input": {
+        // Backend emits tool_start with `input: {}` and the full parsed
+        // input later as tool_input. Capture it so we can show "Read ·
+        // transcript.txt" instead of "Read ·" with no detail.
         const id = currentAssistantIdRef.current;
         if (!id) return;
         setMessages((prev) =>
@@ -190,13 +242,30 @@ export function useAgentBackendStream(
               ...m,
               toolCalls: m.toolCalls.map((tc) =>
                 tc.id === event.id
-                  ? {
-                      ...tc,
-                      status: event.error ? "error" : "completed",
-                      result: event.output || event.error,
-                    }
+                  ? { ...tc, arguments: JSON.stringify(event.input || {}) }
                   : tc
               ),
+            };
+          })
+        );
+        break;
+      }
+      case "tool_end": {
+        const id = currentAssistantIdRef.current;
+        if (!id) return;
+        setMessages((prev) =>
+          prev.map((m) => {
+            if (m.id !== id || !m.toolCalls) return m;
+            return {
+              ...m,
+              toolCalls: m.toolCalls.map((tc) => {
+                if (tc.id !== event.id) return tc;
+                return {
+                  ...tc,
+                  status: event.error ? "error" : "completed",
+                  result: summarizeToolResult(tc, event.output, event.error),
+                };
+              }),
             };
           })
         );
