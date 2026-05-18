@@ -46,6 +46,7 @@ import {
 import NoteParticipants from "./NoteParticipants";
 import MeetingMetadataRow from "./MeetingMetadataRow";
 import MeetingChatRail from "./MeetingChatRail";
+import { useOnFallingEdge } from "../../hooks/useOnFallingEdge";
 import type { CalendarAttendee } from "../../types/calendar";
 
 function formatNoteDate(dateStr: string): string {
@@ -344,29 +345,17 @@ export default function NoteEditor({
   // When a meeting recording finishes, surface the assistant in sidebar
   // mode so the user has a visible "what next?" affordance — without
   // navigating away from the note they're already on.
-  const prevRecordingForChatRef = useRef(false);
-  useEffect(() => {
-    if (
-      prevRecordingForChatRef.current &&
-      !isRecording &&
-      useCliChat &&
-      chatMode === "hidden"
-    ) {
-      prevRecordingForChatRef.current = isRecording;
+  useOnFallingEdge(isRecording, () => {
+    if (useCliChat && chatMode === "hidden") {
       return scheduleUiUpdate(() => setChatMode("sidebar"));
     }
-    prevRecordingForChatRef.current = isRecording;
-  }, [isRecording, useCliChat, chatMode, scheduleUiUpdate]);
+  });
 
-  const prevRecordingForDiarizationRef = useRef(false);
-  useEffect(() => {
-    if (prevRecordingForDiarizationRef.current && !isRecording && diarizationSessionId) {
-      const cancelScheduledUpdate = scheduleUiUpdate(() => setIsDiarizing(true));
-      prevRecordingForDiarizationRef.current = isRecording;
-      return cancelScheduledUpdate;
+  useOnFallingEdge(isRecording, () => {
+    if (diarizationSessionId) {
+      return scheduleUiUpdate(() => setIsDiarizing(true));
     }
-    prevRecordingForDiarizationRef.current = isRecording;
-  }, [diarizationSessionId, isRecording, scheduleUiUpdate]);
+  });
 
   useEffect(() => {
     const expectedSession = diarizationSessionId;

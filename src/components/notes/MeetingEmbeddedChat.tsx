@@ -59,7 +59,14 @@ export default function MeetingEmbeddedChat({
 }: MeetingEmbeddedChatProps) {
   const vaultPath = useSettingsStore((s) => s.vaultPath);
 
-  const transcript = useMemo(() => transcriptPlainText(note), [note]);
+  // Depend only on the fields the parser actually reads — otherwise any
+  // unrelated note-field update (e.g. updated_at after autosave) would
+  // re-parse the entire transcript JSON.
+  const transcript = useMemo(
+    () => transcriptPlainText(note),
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [note.id, note.transcript, note.enhanced_content, note.content]
+  );
 
   // Meeting notes only support sidebar ↔ hidden. The PanelRight button in
   // EmbeddedChat's header tries to flip into floating; coerce that to
@@ -71,6 +78,7 @@ export default function MeetingEmbeddedChat({
   const chat = useEmbeddedChatCli({
     noteId: note.id,
     noteTitle: note.title || "Untitled meeting",
+    noteCreatedAt: note.created_at,
     transcript,
     noteSlug: note.client_note_id || `note-${note.id}`,
   });
@@ -80,9 +88,7 @@ export default function MeetingEmbeddedChat({
     agentState: chat.agentState,
     cli: chat.cli,
     hasMessages: chat.messages.length > 0,
-    sendMessage: (text) => {
-      chat.sendMessage(text);
-    },
+    sendMessage: chat.sendMessage,
   });
 
   return (

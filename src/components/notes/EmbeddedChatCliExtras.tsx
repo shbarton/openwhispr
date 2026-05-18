@@ -51,17 +51,10 @@ interface SlashEntry {
   kind: "skill" | "command";
 }
 
-interface CliExtrasState {
-  readOnly: boolean;
-  setReadOnly: (v: boolean) => void;
-  inputValue: string;
-  setInputValue: (v: string) => void;
-  preflightState: "unknown" | "checking" | "ok" | "blocked";
-  preflightBinaryVersion: string | null;
-  preflightVaultOk: boolean;
-  preflightErrors: Array<{ code: string; message: string }>;
-  rerunPreflight: () => Promise<void>;
-}
+// Shape is owned by useEmbeddedChatCli; reuse the exported type so the two
+// files can't drift.
+import type { CliSideChannel } from "../../hooks/useEmbeddedChatCli";
+type CliExtrasState = CliSideChannel;
 
 interface UseCliExtrasArgs {
   vaultPath: string;
@@ -310,9 +303,9 @@ export function useCliExtras(args: UseCliExtrasArgs): {
           </div>
         </div>
       )}
-      {cli.preflightState === "blocked" && cli.preflightErrors.length > 0 && (
+      {cli.preflight.status === "blocked" && cli.preflight.errors.length > 0 && (
         <div className="px-4 py-2 border-t border-border bg-amber-50 dark:bg-amber-950/30 text-[11px] flex flex-col gap-1">
-          {cli.preflightErrors.map((err) => (
+          {cli.preflight.errors.map((err) => (
             <div
               key={err.code}
               className="flex items-start gap-1.5 text-amber-900 dark:text-amber-200"
@@ -334,7 +327,7 @@ export function useCliExtras(args: UseCliExtrasArgs): {
 
   // ── Empty state: suggestion chips ────────────────────────────────────
   const canStart =
-    cli.preflightState === "ok" || cli.preflightState === "unknown";
+    cli.preflight.status === "ok" || cli.preflight.status === "unknown";
   const emptyState: ReactNode = (
     <div className="flex flex-col items-center justify-center h-full px-6 text-center">
       <p className="text-xs text-foreground/70 mb-3">

@@ -20,6 +20,22 @@ interface UseEmbeddedChatCliOptions {
   transcript: string;
   /** Slug for "source: [[...]]" links in agent-generated tasks. */
   noteSlug?: string;
+  /** Actual ISO date of the meeting (note.created_at). */
+  noteCreatedAt?: string;
+}
+
+export interface CliSideChannel {
+  readOnly: boolean;
+  setReadOnly: (v: boolean) => void;
+  inputValue: string;
+  setInputValue: (v: string) => void;
+  preflight: {
+    status: "unknown" | "checking" | "ok" | "blocked";
+    binaryVersion: string | null;
+    vaultOk: boolean;
+    errors: Array<{ code: string; message: string }>;
+  };
+  rerunPreflight: () => Promise<void>;
 }
 
 interface NoteConversationItem {
@@ -36,24 +52,14 @@ interface UseEmbeddedChatCliReturn {
   sendMessage: (text: string) => Promise<void>;
   cancelStream: () => void;
   noteConversations: NoteConversationItem[];
-  activeConversationId: number | null;
+  activeConversationId: string | null;
   switchConversation: (id: number) => Promise<void>;
   startNewChat: () => void;
-
-  // CLI-specific surface so the parent can render the autocomplete/header
-  // extras inside EmbeddedChat's slot props. Kept off the shared
-  // UseEmbeddedChatReturn shape on purpose — only meeting-note callers care.
-  cli: {
-    readOnly: boolean;
-    setReadOnly: (v: boolean) => void;
-    inputValue: string;
-    setInputValue: (v: string) => void;
-    preflightState: "unknown" | "checking" | "ok" | "blocked";
-    preflightBinaryVersion: string | null;
-    preflightVaultOk: boolean;
-    preflightErrors: Array<{ code: string; message: string }>;
-    rerunPreflight: () => Promise<void>;
-  };
+  /**
+   * CLI-specific surface kept off the shared UseEmbeddedChatReturn shape on
+   * purpose — only meeting-note callers care. See {@link CliSideChannel}.
+   */
+  cli: CliSideChannel;
 }
 
 const SYSTEM_PROMPT_TEMPLATE = (
@@ -157,17 +163,15 @@ export function useEmbeddedChatCli(
     setTranscriptDir(null);
   }, [opts.noteId]);
 
-  const meetingDateIso = useMemo(() => new Date().toISOString(), [opts.noteId]);
-
   const systemPrompt = useMemo(
     () =>
       SYSTEM_PROMPT_TEMPLATE(
         opts.noteTitle || "Untitled meeting",
-        meetingDateIso,
+        opts.noteCreatedAt || "",
         vaultPath,
         opts.noteSlug || "meeting"
       ),
-    [opts.noteTitle, meetingDateIso, vaultPath, opts.noteSlug]
+    [opts.noteTitle, opts.noteCreatedAt, vaultPath, opts.noteSlug]
   );
 
   const streamOpts = useMemo(
@@ -184,32 +188,33 @@ export function useEmbeddedChatCli(
 
   const stream = useAgentBackendStream(streamOpts);
 
-  // Preflight on mount / when the note or settings change
-  const [preflightState, setPreflightState] = useState<
-    "unknown" | "checking" | "ok" | "blocked"
-  >("unknown");
-  const [preflightBinaryVersion, setPreflightBinaryVersion] = useState<
-    string | null
-  >(null);
-  const [preflightVaultOk, setPreflightVaultOk] = useState(false);
-  const [preflightErrors, setPreflightErrors] = useState<
-    Array<{ code: string; message: string }>
-  >([]);
+  // One state object so the four fields update atomically and we don't
+  // burn three intermediate re-renders per preflight.
+  const [preflight, setPreflight] = useState<CliSideChannel["preflight"]>({
+    status: "unknown",
+    binaryVersion: null,
+    vaultOk: false,
+    errors: [],
+  });
 
   const rerunPreflight = useCallback(async () => {
-    setPreflightState("checking");
+    setPreflight((p) => ({ ...p, status: "checking" }));
     const result = await stream.preflight();
     if (!result) {
-      setPreflightState("blocked");
-      setPreflightErrors([
-        { code: "IPC_MISSING", message: "Agent IPC bridge unavailable" },
-      ]);
+      setPreflight({
+        status: "blocked",
+        binaryVersion: null,
+        vaultOk: false,
+        errors: [{ code: "IPC_MISSING", message: "Agent IPC bridge unavailable" }],
+      });
       return;
     }
-    setPreflightBinaryVersion(result.version);
-    setPreflightVaultOk(result.vaultOk);
-    setPreflightErrors(result.errors);
-    setPreflightState(result.ok ? "ok" : "blocked");
+    setPreflight({
+      status: result.ok ? "ok" : "blocked",
+      binaryVersion: result.version,
+      vaultOk: result.vaultOk,
+      errors: result.errors,
+    });
   }, [stream]);
 
   useEffect(() => {
@@ -271,25 +276,29 @@ export function useEmbeddedChatCli(
     // concern. This no-op keeps the EmbeddedChat contract satisfied.
   }, []);
 
+  // Stable reference for the side-channel so downstream memos in
+  // EmbeddedChatCliExtras don't invalidate every render.
+  const cli = useMemo<CliSideChannel>(
+    () => ({
+      readOnly,
+      setReadOnly,
+      inputValue,
+      setInputValue,
+      preflight,
+      rerunPreflight,
+    }),
+    [readOnly, inputValue, preflight, rerunPreflight]
+  );
+
   return {
     messages: stream.messages,
     agentState: stream.agentState,
     sendMessage,
     cancelStream,
     noteConversations: [],
-    activeConversationId: stream.sessionId == null ? null : 1,
+    activeConversationId: stream.sessionId,
     switchConversation,
     startNewChat,
-    cli: {
-      readOnly,
-      setReadOnly,
-      inputValue,
-      setInputValue,
-      preflightState,
-      preflightBinaryVersion,
-      preflightVaultOk,
-      preflightErrors,
-      rerunPreflight,
-    },
+    cli,
   };
 }
