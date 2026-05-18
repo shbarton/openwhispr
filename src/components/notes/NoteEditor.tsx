@@ -296,7 +296,10 @@ export default function NoteEditor({
       prevNoteIdRef.current = note.id;
       autoShowDoneRef.current = false;
       return scheduleUiUpdate(() => {
-        setChatMode("hidden");
+        // Meeting notes with the agent enabled get the chat in sidebar mode
+        // by default so the post-meeting flow is one less click to reach.
+        // All other notes start with the chat hidden.
+        setChatMode(useCliChat ? "sidebar" : "hidden");
         setDiarizedSegments(null);
         setIsDiarizing(false);
         setSpeakerMappings({});
@@ -309,7 +312,7 @@ export default function NoteEditor({
         editorRef.current?.commands.focus();
       });
     }
-  }, [isRecording, note.id, note.title, scheduleUiUpdate]);
+  }, [isRecording, note.id, note.title, scheduleUiUpdate, useCliChat]);
 
   useEffect(() => {
     window.electronAPI?.getSpeakerMappings?.(note.id).then((mappings) => {
@@ -336,6 +339,23 @@ export default function NoteEditor({
       titleRef.current.textContent = note.title || "";
     }
   }, [note.title]);
+
+  // When a meeting recording finishes, surface the assistant in sidebar
+  // mode so the user has a visible "what next?" affordance — without
+  // navigating away from the note they're already on.
+  const prevRecordingForChatRef = useRef(false);
+  useEffect(() => {
+    if (
+      prevRecordingForChatRef.current &&
+      !isRecording &&
+      useCliChat &&
+      chatMode === "hidden"
+    ) {
+      prevRecordingForChatRef.current = isRecording;
+      return scheduleUiUpdate(() => setChatMode("sidebar"));
+    }
+    prevRecordingForChatRef.current = isRecording;
+  }, [isRecording, useCliChat, chatMode, scheduleUiUpdate]);
 
   const prevRecordingForDiarizationRef = useRef(false);
   useEffect(() => {
