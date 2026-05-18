@@ -16,6 +16,7 @@ import {
 import {
   AlertCircle,
   CheckCircle2,
+  ChevronDown,
   Eye,
   FileCode,
   FileEdit,
@@ -23,6 +24,28 @@ import {
   Sparkles,
 } from "lucide-react";
 import { cn } from "../lib/utils";
+import {
+  DropdownMenu,
+  DropdownMenuTrigger,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuSeparator,
+} from "../ui/dropdown-menu";
+import { useSettingsStore } from "../../stores/settingsStore";
+
+const MODEL_OPTIONS: Array<{ value: string; label: string; hint: string }> = [
+  { value: "sonnet", label: "Sonnet", hint: "Balanced — recommended" },
+  { value: "opus", label: "Opus", hint: "Most capable, slower" },
+  { value: "haiku", label: "Haiku", hint: "Fastest, lighter" },
+];
+
+function modelLabelFor(value: string): string {
+  const match = MODEL_OPTIONS.find((m) => m.value === value);
+  if (match) return match.label;
+  // Custom model string — show the last segment or truncate
+  const tail = value.split("-").slice(-2).join("-");
+  return tail.length > 14 ? value.slice(0, 12) + "…" : value;
+}
 
 interface SlashEntry {
   name: string;
@@ -162,41 +185,86 @@ export function useCliExtras(args: UseCliExtrasArgs): {
     [slashOpen, slashMatches, activeCursor, acceptSlash, cli]
   );
 
-  // ── Header extras: vault badge + access-mode toggle ──────────────────
-  const headerExtras: ReactNode = (
-    <>
-      {vaultPath && (
-        <span
-          className="text-[10px] text-foreground-muted truncate max-w-32"
-          title={`Working in vault: ${vaultPath}`}
-        >
-          {vaultPath.split("/").pop() || vaultPath}
-        </span>
-      )}
+  // ── Header extras: vault badge only ──────────────────────────────────
+  // Access toggle + model picker live in the input controls strip below.
+  const headerExtras: ReactNode = vaultPath ? (
+    <span
+      className="text-[10px] text-foreground-muted truncate max-w-32"
+      title={`Working in vault: ${vaultPath}`}
+    >
+      {vaultPath.split("/").pop() || vaultPath}
+    </span>
+  ) : null;
+
+  // ── Controls strip: model picker + access toggle (above input row) ───
+  const agentModel = useSettingsStore((s) => s.agentModel);
+  const setAgentModel = useSettingsStore((s) => s.setAgentModel);
+  const controlsStrip: ReactNode = (
+    <div className="flex items-center gap-1 px-3 pb-1 pt-1.5 select-none">
+      <DropdownMenu>
+        <DropdownMenuTrigger asChild>
+          <button
+            className={cn(
+              "inline-flex items-center gap-1 text-[10px] px-1.5 h-5 rounded-md",
+              "text-foreground-muted hover:text-foreground hover:bg-foreground/5",
+              "transition-colors outline-none disabled:opacity-50"
+            )}
+            disabled={agentState !== "idle"}
+            title="Pick the Claude model the agent uses"
+          >
+            <Sparkles size={10} className="text-accent shrink-0" />
+            <span>{modelLabelFor(agentModel)}</span>
+            <ChevronDown size={9} className="text-foreground-muted/60" />
+          </button>
+        </DropdownMenuTrigger>
+        <DropdownMenuContent align="start" sideOffset={4} className="min-w-44 p-1">
+          {MODEL_OPTIONS.map((m) => (
+            <DropdownMenuItem
+              key={m.value}
+              onClick={() => setAgentModel(m.value)}
+              className={cn(
+                "flex flex-col items-start gap-0 text-xs rounded-md px-2 py-1.5",
+                agentModel === m.value && "bg-foreground/4"
+              )}
+            >
+              <span className="text-foreground font-medium">{m.label}</span>
+              <span className="text-[10px] text-foreground-muted">{m.hint}</span>
+            </DropdownMenuItem>
+          ))}
+          <DropdownMenuSeparator />
+          <div className="px-2 py-1 text-[10px] text-foreground-muted/70">
+            Saved to settings; applies to all meetings.
+          </div>
+        </DropdownMenuContent>
+      </DropdownMenu>
+
+      <span className="text-foreground-muted/30 text-[9px]">·</span>
+
       <button
         onClick={() => cli.setReadOnly(!cli.readOnly)}
         className={cn(
-          "inline-flex items-center gap-1 text-[10px] px-1.5 py-0.5 rounded-md border transition-colors",
+          "inline-flex items-center gap-1 text-[10px] px-1.5 h-5 rounded-md transition-colors disabled:opacity-50",
           cli.readOnly
-            ? "border-border text-foreground-muted"
-            : "border-accent/40 text-accent bg-accent/5"
+            ? "text-foreground-muted hover:text-foreground hover:bg-foreground/5"
+            : "text-accent hover:bg-accent/10"
         )}
         title={
           cli.readOnly
-            ? "Read-only: agent can only read vault files"
-            : "Full access: agent can read, write, and edit"
+            ? "Read-only: agent can only read vault files. Click to give it write access."
+            : "Full access: agent can read, write, and edit. Click to switch to read-only."
         }
         disabled={agentState !== "idle"}
       >
         {cli.readOnly ? <Eye size={10} /> : <FileEdit size={10} />}
-        {cli.readOnly ? "Read-only" : "Full access"}
+        <span>{cli.readOnly ? "Read-only" : "Full access"}</span>
       </button>
-    </>
+    </div>
   );
 
-  // ── Above-input: autocomplete dropdown + tip strip ───────────────────
+  // ── Above-input: autocomplete dropdown + controls strip + tip + preflight banner
   const aboveInput: ReactNode = (
     <>
+      {controlsStrip}
       {slashOpen && (
         <div
           ref={slashListRef}
@@ -243,17 +311,6 @@ export function useCliExtras(args: UseCliExtrasArgs): {
           <div className="px-3 py-1 text-[10px] text-foreground-muted border-t border-border bg-surface-2/30">
             ↑↓ navigate · Tab/Enter to insert · Esc to clear
           </div>
-        </div>
-      )}
-      {agentState === "idle" && !slashOpen && hasMessages && (
-        <div className="px-4 pt-1.5 text-[10px] text-foreground-muted/70 select-none">
-          Tip: type{" "}
-          <code className="px-1 py-0.5 rounded bg-foreground/5 text-foreground-muted">
-            /
-          </code>{" "}
-          to browse{" "}
-          {slashCatalog.length > 0 ? `${slashCatalog.length} ` : ""}
-          installed Claude Code skills.
         </div>
       )}
       {cli.preflightState === "blocked" && cli.preflightErrors.length > 0 && (
