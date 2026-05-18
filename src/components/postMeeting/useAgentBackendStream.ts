@@ -49,22 +49,13 @@ interface UseAgentBackendStreamResult {
   reset: () => void;
 }
 
-function uuid(): string {
-  if (typeof crypto !== "undefined" && "randomUUID" in crypto) {
-    return crypto.randomUUID();
-  }
-  return `s_${Date.now()}_${Math.random().toString(36).slice(2, 10)}`;
-}
+const BULK_READ_TOOLS = new Set(["Read", "Glob", "Grep"]);
 
 /**
- * Translate a raw tool_end payload into a *short* display string.
- *
- * The CLI's Read/Glob/Grep tools return potentially huge blobs (whole file
- * bodies with line numbers, full match lists). Rendering that verbatim in
- * the chat is noise — the user already has the transcript in the left
- * pane, and any vault reads can be re-done by the user. We collapse those
- * to a one-liner like "Read · transcript.txt". Errors keep their full
- * text. Other tools pass through (truncated to keep the header tame).
+ * Translate a raw tool_end payload into a *short* display string. The
+ * Read/Glob/Grep tools return potentially huge blobs and the user already
+ * has the transcript in the left pane — show only "Read · transcript.txt".
+ * Errors keep their full text. Other tools pass through truncated.
  */
 function summarizeToolResult(
   tc: ToolCallInfo,
@@ -74,9 +65,7 @@ function summarizeToolResult(
   if (error) return error;
   if (!output) return undefined;
 
-  const isBulkRead =
-    tc.name === "Read" || tc.name === "Glob" || tc.name === "Grep";
-  if (!isBulkRead) {
+  if (!BULK_READ_TOOLS.has(tc.name)) {
     return output.length > 200 ? output.slice(0, 200) + "…" : output;
   }
 
@@ -126,9 +115,13 @@ export function useAgentBackendStream(
     lastConfigRef.current = opts;
   }, [opts]);
 
-  useEffect(() => {
-    sessionIdRef.current = sessionId;
-  }, [sessionId]);
+  // Write the session-id ref synchronously alongside the state setter so
+  // that send() never reads a stale value between a session update and the
+  // next dispatch.
+  const updateSessionId = useCallback((id: string | null) => {
+    sessionIdRef.current = id;
+    setSessionId(id);
+  }, []);
 
   // ── Wire IPC event listeners once ────────────────────────────────────
   useEffect(() => {
@@ -141,7 +134,7 @@ export function useAgentBackendStream(
     });
     const unsubEnd = api.onCliAgentStreamEnd?.(({ streamId, sessionId: sid }) => {
       if (streamId !== currentStreamIdRef.current) return;
-      if (sid) setSessionId(sid);
+      if (sid) updateSessionId(sid);
       finalizeAssistant();
       setAgentState("idle");
       currentStreamIdRef.current = null;
@@ -157,8 +150,8 @@ export function useAgentBackendStream(
     );
 
     return () => {
-      // Cancel any in-flight subprocess (Gemini point #2: otherwise the CLI
-      // process keeps running until app quit if the user navigates away).
+      // Cancel any in-flight subprocess so navigating away from the panel
+      // doesn't leave `claude` running until the app quits.
       const liveId = currentStreamIdRef.current;
       if (liveId && api.cliAgentStreamCancel) {
         api.cliAgentStreamCancel(liveId).catch(() => {});
@@ -188,15 +181,11 @@ export function useAgentBackendStream(
         break;
       }
       case "text_end": {
-        // Gemini point #4: don't override the accumulated text with
-        // event.content. The backend may emit multiple text_end events:
-        //   - one at message_stop with the running `currentTextContent`
-        //   - and another from `_raw_assistant` if the final assistant
-        //     message differs from the streamed content.
-        // Treating each event as "replace assistant content with X" causes
-        // visible flicker / wipe when the second event is shorter or
-        // structured differently. Trust the accumulator we built from
-        // `text` chunks; just mark streaming as done.
+        // The backend may emit multiple text_end events (one at
+        // message_stop, another from _raw_assistant when the final message
+        // shape differs). Replacing content each time causes visible
+        // flicker. Trust the accumulator built from `text` chunks; this
+        // event just marks streaming as done.
         const id = currentAssistantIdRef.current;
         if (id) {
           setMessages((prev) =>
@@ -273,7 +262,7 @@ export function useAgentBackendStream(
         break;
       }
       case "sdk_session":
-        setSessionId(event.sessionId);
+        updateSessionId(event.sessionId);
         break;
       case "error":
         setError({ message: event.error });
@@ -325,7 +314,7 @@ export function useAgentBackendStream(
     }
 
     // Push user message
-    const userId = uuid();
+    const userId = crypto.randomUUID();
     setMessages((prev) => [
       ...prev,
       {
@@ -337,7 +326,7 @@ export function useAgentBackendStream(
     ]);
 
     // Reserve assistant slot
-    const assistantId = uuid();
+    const assistantId = crypto.randomUUID();
     currentAssistantIdRef.current = assistantId;
     accumulatedTextRef.current = "";
     setMessages((prev) => [
@@ -350,7 +339,7 @@ export function useAgentBackendStream(
       },
     ]);
 
-    const streamId = uuid();
+    const streamId = crypto.randomUUID();
     currentStreamIdRef.current = streamId;
     setError(null);
     setAgentState("thinking");
@@ -403,8 +392,7 @@ export function useAgentBackendStream(
   const reset = useCallback(() => {
     setMessages([]);
     setError(null);
-    setSessionId(null);
-    sessionIdRef.current = null;
+    updateSessionId(null);
     currentAssistantIdRef.current = null;
     accumulatedTextRef.current = "";
     setAgentState("idle");

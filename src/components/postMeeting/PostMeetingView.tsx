@@ -16,7 +16,7 @@
  * Designed for V1: minimal, no auto-spawn, explicit user action to start agent.
  */
 
-import { useEffect, useMemo, useState } from "react";
+import { memo, useEffect, useMemo, useState } from "react";
 import { ArrowLeft, Mic2 } from "lucide-react";
 import type { NoteItem } from "../../types/electron";
 import { useActiveNoteId, useNotes } from "../../stores/noteStore";
@@ -79,6 +79,33 @@ interface ParsedTranscript {
   /** Whether the source data was structured segments (vs. plain text fallback). */
   isStructured: boolean;
 }
+
+const TranscriptSegmentRow = memo(function TranscriptSegmentRow({
+  segment,
+}: {
+  segment: TranscriptSegment;
+}) {
+  const ts = formatTimestamp(segment.timestamp);
+  const who = speakerLabel(segment);
+  const isMic = segment.source === "mic";
+  return (
+    <div className="flex flex-col gap-0.5 break-words">
+      <div className="flex items-center gap-2 text-[10px] uppercase tracking-wide text-foreground-muted">
+        <span
+          className={
+            isMic ? "text-primary font-medium" : "text-accent font-medium"
+          }
+        >
+          {who}
+        </span>
+        {ts && <span>{ts}</span>}
+      </div>
+      <div className="text-foreground/90 whitespace-pre-wrap break-words">
+        {segment.text}
+      </div>
+    </div>
+  );
+});
 
 function transcriptForNote(note: NoteItem | null): ParsedTranscript {
   if (!note) return { segments: [], text: "", isStructured: false };
@@ -196,33 +223,9 @@ export default function PostMeetingView({ onClose }: PostMeetingViewProps) {
             {parsedTranscript.isStructured &&
             parsedTranscript.segments.length > 0 ? (
               <div className="flex flex-col gap-2">
-                {parsedTranscript.segments.map((s, idx) => {
-                  const ts = formatTimestamp(s.timestamp);
-                  const who = speakerLabel(s);
-                  const isMic = s.source === "mic";
-                  return (
-                    <div
-                      key={s.id || idx}
-                      className="flex flex-col gap-0.5 break-words"
-                    >
-                      <div className="flex items-center gap-2 text-[10px] uppercase tracking-wide text-foreground-muted">
-                        <span
-                          className={
-                            isMic
-                              ? "text-primary font-medium"
-                              : "text-accent font-medium"
-                          }
-                        >
-                          {who}
-                        </span>
-                        {ts && <span>{ts}</span>}
-                      </div>
-                      <div className="text-foreground/90 whitespace-pre-wrap break-words">
-                        {s.text}
-                      </div>
-                    </div>
-                  );
-                })}
+                {parsedTranscript.segments.map((s, idx) => (
+                  <TranscriptSegmentRow key={s.id || idx} segment={s} />
+                ))}
               </div>
             ) : transcript ? (
               <div className="whitespace-pre-wrap break-words text-foreground/90 font-mono text-[13px]">

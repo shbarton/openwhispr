@@ -54,6 +54,19 @@ const PERMISSION_MODES = Object.freeze([
 
 const ATTACHMENT_TYPES = Object.freeze(["file", "folder", "image"]);
 
+/** Built-in CLI tool names the agent may request. */
+const AGENT_TOOLS = Object.freeze({
+  Read: "Read",
+  Glob: "Glob",
+  Grep: "Grep",
+  Write: "Write",
+  Edit: "Edit",
+  Bash: "Bash",
+});
+
+/** Tools whose output is large and not useful to display in the chat. */
+const BULK_READ_TOOLS = Object.freeze(["Read", "Glob", "Grep"]);
+
 // ============================================
 // Backend events (emitted during streaming)
 // ============================================
@@ -201,4 +214,6 @@ const ATTACHMENT_TYPES = Object.freeze(["file", "folder", "image"]);
 module.exports = {
   PERMISSION_MODES,
   ATTACHMENT_TYPES,
+  AGENT_TOOLS,
+  BULK_READ_TOOLS,
 };

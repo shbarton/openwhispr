@@ -2,8 +2,8 @@
  * AgentChatPanel - Renders the post-meeting CLI agent chat.
  *
  * Reuses ChatMessages + ChatInput from src/components/chat/ but feeds them via
- * useAgentBackendStream (CLI backend over IPC). Has a "preflight" gate before
- * the agent is started, per Codex review (no auto-spawn).
+ * useAgentBackendStream (CLI backend over IPC). Preflight gates the agent
+ * behind an explicit user gesture — no auto-spawn on screen entry.
  */
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
@@ -51,9 +51,8 @@ function buildSystemPrompt(
   vaultPath: string,
   meetingNoteSlug: string
 ): string {
-  // Gemini point #5: only mention vault paths when one is actually configured;
-  // otherwise the agent would treat the literal string "(not configured)" as
-  // a real directory and try to read/write into it.
+  // Only mention vault paths when one is configured; otherwise the agent
+  // would treat the literal placeholder string as a real directory.
   const hasVault = vaultPath && vaultPath.trim().length > 0;
 
   const vaultSection = hasVault
@@ -165,30 +164,41 @@ export default function AgentChatPanel({
   const [preflight, setPreflight] = useState<CliAgentPreflightResult | null>(
     null
   );
-  const [transcriptPath, setTranscriptPath] = useState<string | null>(null);
+  // These are only ever read inside callbacks/effects — keeping them in
+  // state would re-render the whole panel on each transcript write.
+  const transcriptPathRef = useRef<string | null>(null);
   const [transcriptDir, setTranscriptDir] = useState<string | null>(null);
 
   // Slash-command autocomplete
   const [inputValue, setInputValue] = useState("");
   const [slashCatalog, setSlashCatalog] = useState<SlashEntry[]>([]);
-  const [slashCursor, setSlashCursor] = useState(0);
+  const [cursorRaw, setSlashCursor] = useState(0);
   const slashListRef = useRef<HTMLDivElement>(null);
 
-  const systemPrompt = buildSystemPrompt(
-    meetingTitle,
-    meetingDate,
-    vaultPath,
-    meetingNoteSlug || "meeting"
+  const systemPrompt = useMemo(
+    () =>
+      buildSystemPrompt(
+        meetingTitle,
+        meetingDate,
+        vaultPath,
+        meetingNoteSlug || "meeting"
+      ),
+    [meetingTitle, meetingDate, vaultPath, meetingNoteSlug]
   );
 
-  const stream = useAgentBackendStream({
-    systemPrompt,
-    vaultPath,
-    model: agentModel,
-    cliPath: agentCliPath,
-    readOnly,
-    addDirs: transcriptDir ? [transcriptDir] : undefined,
-  });
+  const streamOpts = useMemo(
+    () => ({
+      systemPrompt,
+      vaultPath,
+      model: agentModel,
+      cliPath: agentCliPath,
+      readOnly,
+      addDirs: transcriptDir ? [transcriptDir] : undefined,
+    }),
+    [systemPrompt, vaultPath, agentModel, agentCliPath, readOnly, transcriptDir]
+  );
+
+  const stream = useAgentBackendStream(streamOpts);
 
   const runPreflight = useCallback(async () => {
     setPreflightStatus("checking");
@@ -243,11 +253,10 @@ export default function AgentChatPanel({
   }, [slashCatalog, slashQuery]);
 
   const slashOpen = slashQuery !== null && slashMatches.length > 0;
-
-  // Reset cursor when the match set changes
-  useEffect(() => {
-    setSlashCursor(0);
-  }, [slashQuery, slashMatches.length]);
+  // Clamp cursor to current match list — avoids a separate reset effect
+  // that fires one render late after the match set changes.
+  const activeCursor =
+    slashMatches.length === 0 ? 0 : cursorRaw % slashMatches.length;
 
   const acceptSlash = useCallback(
     (entry: SlashEntry) => {
@@ -277,7 +286,7 @@ export default function AgentChatPanel({
       }
       if (e.key === "Tab" || (e.key === "Enter" && !e.shiftKey)) {
         e.preventDefault();
-        const pick = slashMatches[slashCursor];
+        const pick = slashMatches[activeCursor];
         if (pick) acceptSlash(pick);
         return true;
       }
@@ -288,7 +297,7 @@ export default function AgentChatPanel({
       }
       return false;
     },
-    [slashOpen, slashMatches, slashCursor, acceptSlash]
+    [slashOpen, slashMatches, activeCursor, acceptSlash]
   );
 
   const handleStart = useCallback(async () => {
@@ -298,10 +307,9 @@ export default function AgentChatPanel({
       await runPreflight();
     }
 
-    // Write the transcript to a file so the agent can Read it instead of
-    // receiving the whole blob inline (saves tokens + avoids overflowing the
-    // first user message bubble).
-    let path: string | null = transcriptPath;
+    // Write the transcript to a file so the agent can Read it on demand
+    // instead of receiving the whole blob inline.
+    let path = transcriptPathRef.current;
     if (!path && transcript && window.electronAPI?.cliAgentPrepareMeeting) {
       const prepared = await window.electronAPI.cliAgentPrepareMeeting({
         noteId,
@@ -309,14 +317,11 @@ export default function AgentChatPanel({
       });
       if (prepared && prepared.ok === true) {
         path = prepared.path;
-        setTranscriptPath(prepared.path);
+        transcriptPathRef.current = prepared.path;
         setTranscriptDir(prepared.addDir);
       } else {
-        // Surface but don't block — we'll fall back to inline preview.
         const errMsg =
-          prepared && prepared.ok === false
-            ? prepared.error
-            : "(no response)";
+          prepared && prepared.ok === false ? prepared.error : "(no response)";
         console.warn(
           "[AgentChatPanel] Failed to write transcript file:",
           errMsg
@@ -325,26 +330,7 @@ export default function AgentChatPanel({
     }
 
     await stream.send(buildFirstUserMessage(path, transcript, meetingTitle));
-  }, [
-    preflightStatus,
-    runPreflight,
-    stream,
-    transcript,
-    transcriptPath,
-    meetingTitle,
-    noteId,
-  ]);
-
-  const handleUserMessage = useCallback(
-    (text: string) => {
-      stream.send(text);
-    },
-    [stream]
-  );
-
-  const handleCancel = useCallback(() => {
-    stream.cancel();
-  }, [stream]);
+  }, [preflightStatus, runPreflight, stream, transcript, meetingTitle, noteId]);
 
   return (
     <div
@@ -509,7 +495,7 @@ export default function AgentChatPanel({
                 </div>
                 {slashMatches.map((entry, idx) => {
                   const Icon = entry.kind === "skill" ? Wand2 : FileCode;
-                  const isActive = idx === slashCursor;
+                  const isActive = idx === activeCursor;
                   return (
                     <button
                       key={entry.name}
@@ -557,18 +543,16 @@ export default function AgentChatPanel({
                 <code className="px-1 py-0.5 rounded bg-foreground/5 text-foreground-muted">
                   /
                 </code>{" "}
-                to browse your{" "}
-                {slashCatalog.length > 0
-                  ? `${slashCatalog.length} installed Claude Code skills`
-                  : "installed Claude Code skills"}
-                .
+                to browse{" "}
+                {slashCatalog.length > 0 ? `${slashCatalog.length} ` : ""}
+                installed Claude Code skills.
               </div>
             )}
             <ChatInput
               agentState={stream.agentState}
               partialTranscript=""
-              onTextSubmit={handleUserMessage}
-              onCancel={handleCancel}
+              onTextSubmit={stream.send}
+              onCancel={stream.cancel}
               autoFocus
               value={inputValue}
               onValueChange={setInputValue}

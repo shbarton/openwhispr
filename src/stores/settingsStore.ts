@@ -340,7 +340,6 @@ export interface SettingsState
   agentEnabled: boolean;
   agentBackend: "claude-cli";
   agentModel: string;
-  agentPermissionMode: "plan" | "default" | "acceptEdits" | "bypassPermissions";
   agentCliPath: string;
 
   transcriptionMode: InferenceMode;
@@ -516,9 +515,6 @@ export interface SettingsState
   setVaultPath: (value: string) => void;
   setAgentEnabled: (value: boolean) => void;
   setAgentModel: (value: string) => void;
-  setAgentPermissionMode: (
-    value: "plan" | "default" | "acceptEdits" | "bypassPermissions"
-  ) => void;
   setAgentCliPath: (value: string) => void;
   setIsSignedIn: (value: boolean) => void;
 
@@ -761,17 +757,6 @@ export const useSettingsStore = create<SettingsState>()((set, get) => ({
   agentEnabled: readBoolean("agentEnabled", true),
   agentBackend: "claude-cli" as const,
   agentModel: readString("agentModel", "sonnet"),
-  agentPermissionMode: (() => {
-    const v = readString("agentPermissionMode", "acceptEdits");
-    if (
-      v === "plan" ||
-      v === "default" ||
-      v === "acceptEdits" ||
-      v === "bypassPermissions"
-    )
-      return v;
-    return "acceptEdits" as const;
-  })(),
   agentCliPath: readString("agentCliPath", ""),
 
   isSignedIn: readBoolean("isSignedIn", false),
@@ -1221,12 +1206,6 @@ export const useSettingsStore = create<SettingsState>()((set, get) => ({
 
   setAgentEnabled: createBooleanSetter("agentEnabled"),
   setAgentModel: createStringSetter("agentModel"),
-  setAgentPermissionMode: (
-    value: "plan" | "default" | "acceptEdits" | "bypassPermissions"
-  ) => {
-    if (isBrowser) localStorage.setItem("agentPermissionMode", value);
-    set({ agentPermissionMode: value });
-  },
   setAgentCliPath: createStringSetter("agentCliPath"),
 
   setIsSignedIn: (value: boolean) => {

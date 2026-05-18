@@ -2,13 +2,9 @@
  * binaryResolver - Resolve the full path to the `claude` CLI binary.
  *
  * Electron's main process may not have ~/.npm-global/bin on PATH when launched
- * from Finder/Spotlight (same problem VS Code's extension host has).
- *
- * Hardening per Codex review (point #6):
- *   1. Honor a user-configured `agentCliPath` setting first.
- *   2. Probe common install locations with `fs.accessSync` (no shell).
- *   3. Fall back to a login-shell `which claude` only if nothing else worked.
- *   4. Memoize the result.
+ * from Finder/Spotlight, so we probe common locations and fall back to a
+ * login shell. Result is memoized; the cache invalidates when the
+ * user-configured override path changes.
  */
 
 const { execSync } = require("child_process");
@@ -29,8 +25,9 @@ const COMMON_LOCATIONS = [
 
 function isExecutableFile(p) {
   try {
-    fs.accessSync(p, fs.constants.X_OK);
-    return fs.statSync(p).isFile();
+    const st = fs.statSync(p);
+    // Single syscall: check that it's a regular file with any execute bit set.
+    return st.isFile() && (st.mode & 0o111) !== 0;
   } catch {
     return false;
   }

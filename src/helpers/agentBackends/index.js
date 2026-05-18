@@ -60,8 +60,8 @@ class AgentBackendManager {
       await backend.send({ content: prompt });
       return backend;
     } catch (err) {
-      // Gemini point #3: if start/resume/send throws, don't leak the streamId
-      // into activeStreams (would block future starts with the same id).
+      // If start/resume/send throws, don't leak the streamId in the active
+      // map (would block future starts with the same id).
       this.activeStreams.delete(streamId);
       try {
         await backend.close();

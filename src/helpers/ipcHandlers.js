@@ -37,10 +37,10 @@ const {
 const modelRegistryData = require("../models/modelRegistryData.json");
 const { VaultMetadataProvider } = require("./vaultMetadata");
 const { agentBackendManager } = require("./agentBackends");
+const { AGENT_TOOLS } = require("./agentBackends/ChatBackend");
 const {
   getClaudePath,
   getClaudeVersion,
-  resetCache: resetClaudePathCache,
 } = require("./agentBackends/binaryResolver");
 
 const STREAMING_CLIENT_BY_PROVIDER = {
@@ -5892,23 +5892,25 @@ class IPCHandlers {
           const filePath = path.join(baseDir, fileName);
           await fs.promises.writeFile(filePath, transcript, "utf-8");
 
-          // Best-effort: prune old transcripts (keep most-recent 50)
-          try {
-            const entries = await fs.promises.readdir(baseDir);
-            const stats = await Promise.all(
-              entries.map(async (name) => {
-                const p = path.join(baseDir, name);
-                const st = await fs.promises.stat(p);
-                return { p, mtime: st.mtimeMs };
-              })
-            );
-            stats.sort((a, b) => b.mtime - a.mtime);
-            for (const old of stats.slice(50)) {
-              fs.promises.unlink(old.p).catch(() => {});
+          // Prune happens off the request path so the IPC reply isn't held up.
+          setImmediate(async () => {
+            try {
+              const entries = await fs.promises.readdir(baseDir);
+              const stats = await Promise.all(
+                entries.map(async (name) => {
+                  const p = path.join(baseDir, name);
+                  const st = await fs.promises.stat(p);
+                  return { p, mtime: st.mtimeMs };
+                })
+              );
+              stats.sort((a, b) => b.mtime - a.mtime);
+              for (const old of stats.slice(50)) {
+                fs.promises.unlink(old.p).catch(() => {});
+              }
+            } catch {
+              // ignore prune failures
             }
-          } catch {
-            // ignore prune failures
-          }
+          });
 
           return { ok: true, path: filePath, addDir: baseDir };
         } catch (error) {
@@ -5926,12 +5928,10 @@ class IPCHandlers {
         binaryPath: null,
         version: null,
         vaultOk: false,
-        authOk: false,
+        authOk: true, // optimistic — actual stream will surface AUTH_EXPIRED
         errors: [],
       };
       try {
-        // Reset cache so a freshly-configured path is picked up
-        resetClaudePathCache();
         const binaryPath = getClaudePath({ configuredPath: opts.agentCliPath });
         if (!binaryPath) {
           result.errors.push({
@@ -5942,8 +5942,22 @@ class IPCHandlers {
           return result;
         }
         result.binaryPath = binaryPath;
-        result.version = getClaudeVersion(binaryPath);
-        if (!result.version) {
+
+        const vaultPath = (opts.vaultPath || "").trim();
+
+        // Run the two independent probes concurrently.
+        const [version, vaultStat] = await Promise.all([
+          Promise.resolve().then(() => getClaudeVersion(binaryPath)),
+          vaultPath
+            ? fs.promises
+                .stat(vaultPath)
+                .then((st) => ({ ok: st.isDirectory() }))
+                .catch((err) => ({ ok: false, err }))
+            : Promise.resolve(null),
+        ]);
+
+        result.version = version;
+        if (!version) {
           result.errors.push({
             code: "VERSION_UNKNOWN",
             message:
@@ -5951,44 +5965,29 @@ class IPCHandlers {
           });
         }
 
-        // Vault path check
-        const vaultPath = (opts.vaultPath || "").trim();
         if (!vaultPath) {
           result.errors.push({
             code: "VAULT_PATH_UNSET",
             message:
               "Vault path is not set. The agent will run without vault access.",
           });
+        } else if (vaultStat && vaultStat.ok) {
+          result.vaultOk = true;
+        } else if (vaultStat && vaultStat.err) {
+          result.errors.push({
+            code: "VAULT_INACCESSIBLE",
+            message: `Vault path is not accessible: ${vaultStat.err.message}`,
+          });
         } else {
-          try {
-            const stat = fs.statSync(vaultPath);
-            result.vaultOk = stat.isDirectory();
-            if (!result.vaultOk) {
-              result.errors.push({
-                code: "VAULT_NOT_DIRECTORY",
-                message: `Vault path is not a directory: ${vaultPath}`,
-              });
-            }
-          } catch (err) {
-            result.errors.push({
-              code: "VAULT_INACCESSIBLE",
-              message: `Vault path is not accessible: ${err.message}`,
-            });
-          }
+          result.errors.push({
+            code: "VAULT_NOT_DIRECTORY",
+            message: `Vault path is not a directory: ${vaultPath}`,
+          });
         }
-
-        // Auth check: best-effort, run `claude --print "test"` with a short
-        // timeout and look for auth-error markers. We skip this for V1 because
-        // it costs an API call; instead we rely on the actual stream surfacing
-        // an AUTH_EXPIRED error if it happens.
-        // TODO V2: add a lightweight "claude auth status" probe.
-        result.authOk = true; // optimistic
 
         result.ok =
           result.binaryPath != null &&
-          result.errors.every(
-            (e) => e.code === "VAULT_PATH_UNSET" // soft warning only
-          );
+          result.errors.every((e) => e.code === "VAULT_PATH_UNSET");
         return result;
       } catch (error) {
         debugLogger.error("CLI agent preflight error:", error);
@@ -6009,25 +6008,22 @@ class IPCHandlers {
           throw new Error("cli-agent-stream-start: streamId is required");
         }
         try {
-          // Permission / tool defaults per user request 2026-05-17:
-          // bypass permissions by default, allow the full main toolkit. Bash
-          // is still blocked because the transcript is untrusted input and
-          // an injection that gets Bash would be the worst-case break. The
-          // renderer can flip `readOnly` to constrain back to Read/Glob/Grep.
+          // Bash stays blocked unconditionally: the transcript is untrusted
+          // user content and an injection that gets Bash would be the
+          // worst-case break.
           const readOnly = config?.readOnly === true;
+          const { Read, Glob, Grep, Write, Edit, Bash } = AGENT_TOOLS;
           const allowedTools = readOnly
-            ? ["Read", "Glob", "Grep"]
-            : ["Read", "Glob", "Grep", "Write", "Edit"];
+            ? [Read, Glob, Grep]
+            : [Read, Glob, Grep, Write, Edit];
           const backendConfig = {
             model: config?.model || undefined,
             systemPrompt: systemPrompt || "",
             permissionMode: readOnly ? "plan" : "bypassPermissions",
             allowedTools,
-            disallowedTools: ["Bash"],
+            disallowedTools: [Bash],
             workspaceRoot: config?.workspaceRoot || undefined,
             cliPath: config?.cliPath || undefined,
-            // Extra directories the agent is allowed to read from (e.g. the
-            // transcript file under userData). Forwarded as --add-dir.
             addDirs: Array.isArray(config?.addDirs) ? config.addDirs : [],
           };
 
@@ -6096,8 +6092,8 @@ class IPCHandlers {
       }
     });
 
-    // Clean up any in-flight streams when the app is quitting. Without this,
-    // we'd leave zombie `claude` subprocesses around (Codex point #7).
+    // Kill any live `claude` subprocesses before app exit so we don't
+    // leave them running headless.
     app.once("before-quit", () => {
       try {
         const ids = Array.from(agentBackendManager.activeStreams.keys());

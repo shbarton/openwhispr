@@ -165,10 +165,8 @@ class ClaudeAgentBackend {
       }
     }
 
-    // Tool allowlist. The caller may supply an explicit list (V1 hardening from
-    // Codex/Gemini review point #1 — without this, "Edit mode" would have
-    // effectively unrestricted tool access including Bash). MCP server tools
-    // are still merged in.
+    // Tool allowlist. The caller supplies the explicit list of built-in
+    // tools; MCP server tools (if any) are merged in.
     const allowedTools = [];
     if (Array.isArray(this.config.allowedTools)) {
       allowedTools.push(...this.config.allowedTools);
@@ -209,10 +207,9 @@ class ClaudeAgentBackend {
       args.push("--add-dir", ...this.config.addDirs);
     }
 
-    // Build environment — extend PATH to ensure claude is findable
-    // Build environment via allowlist (Codex review point #5).
-    // We do NOT inherit the full process.env — that would leak unrelated
-    // secrets, app internals, and inherited tokens into a tool-running agent.
+    // We do NOT inherit the full process.env — it would leak unrelated
+    // secrets and app internals into a tool-running agent. Only the keys
+    // Claude's auth + CLI tooling actually need are forwarded.
     const env = {
       PATH: process.env.PATH || "",
       HOME: process.env.HOME || "",
@@ -684,14 +681,29 @@ class ClaudeAgentBackend {
   }
 
   /**
-   * Cancel the current stream.
+   * Cancel the current stream. Escalates SIGTERM → SIGKILL after 2s in case
+   * the CLI gets stuck (e.g. blocked on a network call we can't interrupt).
    */
   cancel() {
     this.cancelled = true;
     this.streaming = false;
-    if (this.process) {
-      this.process.kill("SIGTERM");
+    const proc = this.process;
+    if (proc) {
       this.process = null;
+      try {
+        proc.kill("SIGTERM");
+      } catch {
+        // already dead
+      }
+      setTimeout(() => {
+        if (proc.exitCode == null && proc.signalCode == null) {
+          try {
+            proc.kill("SIGKILL");
+          } catch {
+            // already dead
+          }
+        }
+      }, 2000).unref();
     }
   }
 
