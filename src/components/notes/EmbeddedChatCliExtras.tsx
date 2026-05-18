@@ -15,13 +15,11 @@ import {
 } from "react";
 import {
   AlertCircle,
-  CheckCircle2,
   ChevronDown,
   Eye,
   FileCode,
   FileEdit,
   Wand2,
-  Sparkles,
 } from "lucide-react";
 import { cn } from "../lib/utils";
 import {
@@ -212,7 +210,6 @@ export function useCliExtras(args: UseCliExtrasArgs): {
             disabled={agentState !== "idle"}
             title="Pick the Claude model the agent uses"
           >
-            <Sparkles size={10} className="text-accent shrink-0" />
             <span>{modelLabelFor(agentModel)}</span>
             <ChevronDown size={9} className="text-foreground-muted/60" />
           </button>
@@ -340,23 +337,9 @@ export function useCliExtras(args: UseCliExtrasArgs): {
     cli.preflightState === "ok" || cli.preflightState === "unknown";
   const emptyState: ReactNode = (
     <div className="flex flex-col items-center justify-center h-full px-6 text-center">
-      <Sparkles size={20} className="text-accent mb-3" />
-      <p className="text-xs text-foreground/70 mb-1">
+      <p className="text-xs text-foreground/70 mb-3">
         Ready to dig into this meeting
       </p>
-      {cli.preflightBinaryVersion && cli.preflightState === "ok" && (
-        <p className="text-[10px] text-foreground-muted mb-3 flex items-center gap-1.5">
-          <CheckCircle2 size={10} className="text-emerald-600" />
-          Claude {cli.preflightBinaryVersion}
-          {cli.preflightVaultOk && (
-            <>
-              <span className="mx-1">·</span>
-              <CheckCircle2 size={10} className="text-emerald-600" />
-              Vault OK
-            </>
-          )}
-        </p>
-      )}
       {canStart ? (
         <div className="flex flex-wrap gap-1.5 justify-center max-w-xs">
           {suggestions.map((s) => (
