@@ -13,6 +13,9 @@ import { useTheme } from "./hooks/useTheme";
 const ControlPanel = React.lazy(() => import("./components/ControlPanel.tsx"));
 const OnboardingFlow = React.lazy(() => import("./components/OnboardingFlow.tsx"));
 const AgentOverlay = React.lazy(() => import("./components/AgentOverlay.tsx"));
+const TranscriptionBarTestHarness = React.lazy(() =>
+  import("./components/notes/TranscriptionBarTestHarness.tsx"),
+);
 
 export default function AppRouter() {
   useTheme();
@@ -28,6 +31,14 @@ export default function AppRouter() {
 
   if (params.includes("transcription-preview=true")) {
     return <TranscriptionPreviewOverlay />;
+  }
+
+  if (params.includes("ui-test=transcription-bar")) {
+    return (
+      <Suspense fallback={<LoadingFallback />}>
+        <TranscriptionBarTestHarness />
+      </Suspense>
+    );
   }
 
   return <MainApp />;
