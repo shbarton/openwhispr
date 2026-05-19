@@ -38,7 +38,10 @@ class WindowManager {
     this._cachedActivationMode = "tap";
     this._floatingIconAutoHide = false;
     this._agentAnimationState = null;
-    this._panelStartPosition = "bottom-right";
+    // Default to bottom-center for the new SpellStream-style bar widget.
+    // The user setting may override this via _panelStartPosition mutators —
+    // see `setPanelStartPosition` and onboarding code.
+    this._panelStartPosition = "center";
     this._isDictatingToggle = false;
 
     app.on("before-quit", () => {
