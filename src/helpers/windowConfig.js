@@ -31,10 +31,13 @@ const FLOATING_OVERLAY_TYPE =
 const WINDOW_SIZES = {
   BASE: { width: 96, height: 96 },
   // BAR sizes the transparent Electron window around the SpellStream-style
-  // bar widget. Width fits the 140px hovered/recording pill plus its drop
-  // shadow; height fits the 24px pill plus a 44px accessible hit area for
-  // the idle bar.
-  BAR: { width: 200, height: 64 },
+  // bar widget. The bar's own container is `position: fixed; bottom: 12px`
+  // and the pill itself maxes at 140×24, but on hover/recording it carries
+  // a glow halo (`0 0 20px var(--color-accent-light)`) plus a drop shadow,
+  // and the idle bar's accessible hit area is 44px tall. Window dimensions
+  // include 30-40px padding on each side so the halo/shadow doesn't clip
+  // against the transparent window edge.
+  BAR: { width: 240, height: 96 },
   WITH_MENU: { width: 240, height: 280 },
   WITH_TOAST: { width: 400, height: 500 },
   EXPANDED: { width: 400, height: 500 },

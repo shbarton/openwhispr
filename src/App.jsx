@@ -356,9 +356,12 @@ export default function App() {
 
   return (
     <div className="dictation-window">
+      {/* Wrapper is a plain container — TranscriptionBarView positions itself
+          via its own `position: fixed; bottom: 12px` CSS, so we just need an
+          element here to attach drag/menu handlers to. Events bubble up from
+          the bar (a descendant) reliably. */}
       <div
         ref={wrapperRef}
-        className="fixed bottom-1 left-1/2 -translate-x-1/2 z-50"
         title={barState === "idle" ? formatHotkeyLabel(hotkey) : undefined}
         onMouseEnter={() => {
           setIsHovered(true);
@@ -396,7 +399,9 @@ export default function App() {
         {isCommandMenuOpen && (
           <div
             ref={commandMenuRef}
-            className="absolute bottom-full left-1/2 -translate-x-1/2 mb-3 w-48 rounded-lg border border-border bg-popover text-popover-foreground shadow-lg backdrop-blur-sm"
+            // Bar lives at `bottom: 12px` with max height 44px (idle hit
+            // area). Place the menu just above that with an 8px gap.
+            className="fixed bottom-[64px] left-1/2 -translate-x-1/2 z-50 w-48 rounded-lg border border-border bg-popover text-popover-foreground shadow-lg backdrop-blur-sm"
             onMouseEnter={() => {
               setWindowInteractivity(true);
             }}
