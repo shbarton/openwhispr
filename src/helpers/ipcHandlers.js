@@ -2307,6 +2307,14 @@ class IPCHandlers {
       return await this.windowManager.stopWindowDrag();
     });
 
+    ipcMain.handle("get-main-window-bounds", async () => {
+      return this.windowManager.getMainWindowBounds();
+    });
+
+    ipcMain.handle("set-main-window-position", async (event, position) => {
+      return this.windowManager.setMainWindowPosition(position || {});
+    });
+
     ipcMain.handle("open-external", async (event, url) => {
       try {
         await shell.openExternal(url);

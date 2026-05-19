@@ -536,6 +536,48 @@ class WindowManager {
     return await this.dragManager.stopWindowDrag();
   }
 
+  getMainWindowBounds() {
+    if (!this.mainWindow || this.mainWindow.isDestroyed()) {
+      return null;
+    }
+    return this.mainWindow.getBounds();
+  }
+
+  // Move the dictation panel to an absolute screen coordinate. Used by the
+  // renderer to restore a localStorage-persisted position on launch. Clamps
+  // to the nearest display's work area so a stale coordinate (e.g. monitor
+  // disconnected) can't push the widget offscreen.
+  setMainWindowPosition({ x, y }) {
+    if (!this.mainWindow || this.mainWindow.isDestroyed()) {
+      return { success: false, message: "Window not available" };
+    }
+    if (!Number.isFinite(x) || !Number.isFinite(y)) {
+      return { success: false, message: "Invalid coordinates" };
+    }
+
+    const bounds = this.mainWindow.getBounds();
+    const display = screen.getDisplayNearestPoint({ x, y });
+    const workArea = display.workArea || display.bounds;
+
+    const clampedX = Math.max(
+      workArea.x,
+      Math.min(x, workArea.x + workArea.width - bounds.width)
+    );
+    const clampedY = Math.max(
+      workArea.y,
+      Math.min(y, workArea.y + workArea.height - bounds.height)
+    );
+
+    this.mainWindow.setBounds({
+      x: Math.round(clampedX),
+      y: Math.round(clampedY),
+      width: bounds.width,
+      height: bounds.height,
+    });
+
+    return { success: true, bounds: this.mainWindow.getBounds() };
+  }
+
   openExternalUrl(url, showError = true) {
     shell.openExternal(url).catch((error) => {
       if (showError) {

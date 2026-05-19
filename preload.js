@@ -306,6 +306,9 @@ contextBridge.exposeInMainWorld("electronAPI", {
   getHotkeyModeInfo: () => ipcRenderer.invoke("get-hotkey-mode-info"),
   startWindowDrag: () => ipcRenderer.invoke("start-window-drag"),
   stopWindowDrag: () => ipcRenderer.invoke("stop-window-drag"),
+  getMainWindowBounds: () => ipcRenderer.invoke("get-main-window-bounds"),
+  setMainWindowPosition: (position) =>
+    ipcRenderer.invoke("set-main-window-position", position),
   setMainWindowInteractivity: (interactive) =>
     ipcRenderer.invoke("set-main-window-interactivity", interactive),
   setNotificationInteractivity: (interactive) =>

@@ -18,6 +18,40 @@ const DRAG_THRESHOLD_PX = 5;
 // The View animates the bars from `animationTime` even when levels are zero.
 const SYNTHETIC_LEVELS = Object.freeze(Array(12).fill(0));
 
+const PANEL_POSITION_STORAGE_KEY = "dictationPanelPosition";
+
+function readStoredPanelPosition() {
+  try {
+    const raw = localStorage.getItem(PANEL_POSITION_STORAGE_KEY);
+    if (!raw) return null;
+    const parsed = JSON.parse(raw);
+    if (
+      parsed &&
+      Number.isFinite(parsed.x) &&
+      Number.isFinite(parsed.y)
+    ) {
+      return { x: parsed.x, y: parsed.y };
+    }
+    return null;
+  } catch {
+    return null;
+  }
+}
+
+function writeStoredPanelPosition(bounds) {
+  if (!bounds || !Number.isFinite(bounds.x) || !Number.isFinite(bounds.y)) {
+    return;
+  }
+  try {
+    localStorage.setItem(
+      PANEL_POSITION_STORAGE_KEY,
+      JSON.stringify({ x: bounds.x, y: bounds.y })
+    );
+  } catch {
+    // Quota exceeded or storage disabled — position simply won't persist.
+  }
+}
+
 export default function App() {
   const [isHovered, setIsHovered] = useState(false);
   const [isCommandMenuOpen, setIsCommandMenuOpen] = useState(false);
@@ -230,6 +264,17 @@ export default function App() {
     return () => document.removeEventListener("keydown", handleKeyPress);
   }, [isCommandMenuOpen]);
 
+  // Restore the user's last-dragged panel position on mount. Mid-drag
+  // updates are not persisted — we only save on mouseup (see
+  // onWrapperMouseUp). If no stored position exists, the main process's
+  // default bottom-center anchor is used.
+  useEffect(() => {
+    const stored = readStoredPanelPosition();
+    if (stored) {
+      window.electronAPI?.setMainWindowPosition?.(stored);
+    }
+  }, []);
+
   // Advance the animation clock at rAF cadence. The View clamps to 30fps
   // internally via CSS, so we don't need to throttle here.
   useEffect(() => {
@@ -292,8 +337,13 @@ export default function App() {
   const onWrapperMouseUp = (e) => {
     handleMouseUp(e);
     setDragStartPos(null);
-    // Leave hasDragged true until the next mousedown so the click handlers
-    // (which fire after mouseup) can see it.
+    // Persist the new position only if the user actually moved the window.
+    // Otherwise we'd overwrite the stored bounds on every plain click.
+    if (hasDraggedRef.current) {
+      window.electronAPI?.getMainWindowBounds?.().then(writeStoredPanelPosition);
+    }
+    // Leave hasDraggedRef true until the next mousedown so click handlers
+    // (which fire after mouseup) can still see it and suppress their action.
   };
 
   const onWrapperContextMenu = (e) => {
