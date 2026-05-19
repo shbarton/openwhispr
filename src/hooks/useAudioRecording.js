@@ -17,7 +17,14 @@ export const useAudioRecording = (toast, options = {}) => {
   const audioManagerRef = useRef(null);
   const startLockRef = useRef(false);
   const stopLockRef = useRef(false);
-  const { onToggle } = options;
+  const { onToggle, onLevels } = options;
+
+  // onLevels stashed in a ref so the AudioManager callback (registered once
+  // on mount) can read the latest reference each tick without resubscribing.
+  const onLevelsRef = useRef(onLevels);
+  useEffect(() => {
+    onLevelsRef.current = onLevels;
+  }, [onLevels]);
 
   const performStartRecording = useCallback(async () => {
     if (startLockRef.current) return false;
@@ -113,6 +120,9 @@ export const useAudioRecording = (toast, options = {}) => {
       },
       onPartialTranscript: (text) => {
         setPartialTranscript(text);
+      },
+      onLevels: (levels) => {
+        onLevelsRef.current?.(levels);
       },
       onTranscriptionComplete: async (result) => {
         if (getSettings().pauseMediaOnDictation) {

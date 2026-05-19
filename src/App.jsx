@@ -14,9 +14,9 @@ import { TranscriptionBarView } from "./components/notes/TranscriptionBarView";
 // click is suppressed.
 const DRAG_THRESHOLD_PX = 5;
 
-// v1 ships with a synthetic shimmer waveform — no real mic input yet.
-// The View animates the bars from `animationTime` even when levels are zero.
-const SYNTHETIC_LEVELS = Object.freeze(Array(12).fill(0));
+// Bars start at zero so the View's `animationTime`-driven shimmer carries
+// the visual until the first sample lands from the analyser (~100ms).
+const ZERO_LEVELS = Object.freeze(Array(12).fill(0));
 
 const PANEL_POSITION_STORAGE_KEY = "dictationPanelPosition";
 
@@ -67,6 +67,16 @@ export default function App() {
 
   // Animation clock for the bar's synthetic shimmer / ripple animations.
   const [animationTime, setAnimationTime] = useState(0);
+
+  // Mic levels sampled from the AudioManager's silence analyser at ~10Hz.
+  // A ref carries the latest sample to avoid re-rendering the whole tree on
+  // every tick; the rAF animation loop copies it into state so the bar
+  // updates roughly with each frame.
+  const levelsRef = useRef(ZERO_LEVELS);
+  const [levels, setLevels] = useState(ZERO_LEVELS);
+  const handleLevels = React.useCallback((next) => {
+    levelsRef.current = next;
+  }, []);
 
   // Floating icon auto-hide setting (read from store, synced via IPC).
   const floatingIconAutoHide = useSettingsStore((s) => s.floatingIconAutoHide);
@@ -184,6 +194,7 @@ export default function App() {
   const { isRecording, isProcessing, toggleListening, cancelRecording, cancelProcessing } =
     useAudioRecording(toast, {
       onToggle: handleDictationToggle,
+      onLevels: handleLevels,
     });
 
   // Sync auto-hide from main process — setState directly to avoid IPC echo
@@ -275,18 +286,31 @@ export default function App() {
     }
   }, []);
 
-  // Advance the animation clock at rAF cadence. The View clamps to 30fps
-  // internally via CSS, so we don't need to throttle here.
+  // Advance the animation clock and republish the latest mic levels at rAF
+  // cadence. The View clamps to 30fps internally via CSS, so we don't need
+  // to throttle here. The levels ref is updated by AudioManager at ~10Hz;
+  // copying it into state on every frame lets the bars decay smoothly
+  // between samples instead of stepping.
   useEffect(() => {
     let raf;
     const start = performance.now();
     const tick = (now) => {
       setAnimationTime((now - start) / 1000);
+      setLevels(levelsRef.current);
       raf = requestAnimationFrame(tick);
     };
     raf = requestAnimationFrame(tick);
     return () => cancelAnimationFrame(raf);
   }, []);
+
+  // Clear lingering mic data when we're not actively recording so the bar
+  // falls back to its synthetic shimmer baseline.
+  useEffect(() => {
+    if (!isRecording) {
+      levelsRef.current = ZERO_LEVELS;
+      setLevels(ZERO_LEVELS);
+    }
+  }, [isRecording]);
 
   // Map useAudioRecording booleans → 3-state bar machine.
   const barState = isRecording ? "recording" : isProcessing ? "transcribing" : "idle";
@@ -387,7 +411,7 @@ export default function App() {
       >
         <TranscriptionBarView
           state={barState}
-          levels={SYNTHETIC_LEVELS}
+          levels={levels}
           animationTime={animationTime}
           errorMessage={null}
           showSlowMessage={false}

@@ -110,6 +110,7 @@ class AudioManager {
     this.onError = null;
     this.onTranscriptionComplete = null;
     this.onPartialTranscript = null;
+    this.onLevels = null;
     this.cachedApiKey = null;
     this.cachedApiKeyProvider = null;
 
@@ -205,12 +206,14 @@ registerProcessor("pcm-streaming-processor", PCMStreamingProcessor);
     onTranscriptionComplete,
     onPartialTranscript,
     onStreamingCommit,
+    onLevels,
   }) {
     this.onStateChange = onStateChange;
     this.onError = onError;
     this.onTranscriptionComplete = onTranscriptionComplete;
     this.onPartialTranscript = onPartialTranscript;
     this.onStreamingCommit = onStreamingCommit;
+    this.onLevels = onLevels;
   }
 
   setSkipReasoning(skip) {
@@ -356,10 +359,21 @@ registerProcessor("pcm-streaming-processor", PCMStreamingProcessor);
         this._silenceCtx = new AudioContext();
         this._silenceAnalyser = this._silenceCtx.createAnalyser();
         this._silenceAnalyser.fftSize = 2048;
+        // smoothingTimeConstant defaults to 0.8 which gives a nice trailing
+        // decay for the visualizer without us having to do that math.
         const sourceNode = this._silenceCtx.createMediaStreamSource(micStream);
         sourceNode.connect(this._silenceAnalyser);
         this._localSpeechGateState = createLocalSpeechGateState();
         const dataArray = new Uint8Array(this._silenceAnalyser.fftSize);
+        const freqArray = new Uint8Array(this._silenceAnalyser.frequencyBinCount);
+        // We render 12 bars in the transcription bar; the View mirrors them
+        // into 24 to make the center loudest.
+        const LEVEL_BUCKETS = 12;
+        const bucketLevels = new Array(LEVEL_BUCKETS).fill(0);
+        // Voice energy lives mostly below ~4 kHz. With fftSize 2048 and an
+        // assumed 44.1/48 kHz context, bin N covers ~24 Hz; bin 170 ≈ 4 kHz.
+        const VOICE_BIN_LIMIT = Math.min(freqArray.length, 170);
+        const binsPerBucket = Math.max(1, Math.floor(VOICE_BIN_LIMIT / LEVEL_BUCKETS));
         this._silenceInterval = setInterval(() => {
           this._silenceAnalyser.getByteTimeDomainData(dataArray);
           let sum = 0;
@@ -372,6 +386,19 @@ registerProcessor("pcm-streaming-processor", PCMStreamingProcessor);
           }
           const rms = Math.sqrt(sum / dataArray.length);
           recordLocalSpeechWindow(this._localSpeechGateState, rms, peak);
+
+          if (this.onLevels) {
+            this._silenceAnalyser.getByteFrequencyData(freqArray);
+            for (let b = 0; b < LEVEL_BUCKETS; b++) {
+              const start = b * binsPerBucket;
+              const end = b === LEVEL_BUCKETS - 1 ? VOICE_BIN_LIMIT : start + binsPerBucket;
+              let bucketSum = 0;
+              for (let i = start; i < end; i++) bucketSum += freqArray[i];
+              // Byte FFT values are 0-255; normalize to 0-1.
+              bucketLevels[b] = bucketSum / ((end - start) * 255);
+            }
+            this.onLevels(bucketLevels);
+          }
         }, 100);
       } catch (e) {
         logger.warn("Audio level gate setup failed, skipping", { error: e.message }, "audio");
