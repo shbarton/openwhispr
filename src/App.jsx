@@ -275,6 +275,19 @@ export default function App() {
     return () => document.removeEventListener("keydown", handleKeyPress);
   }, [isCommandMenuOpen]);
 
+  // Dismiss the command menu when the panel loses focus (i.e. the user
+  // clicked another app/window). Clicks landing outside the small overlay
+  // window never reach our document-level mousedown handler — they hit the
+  // click-through region or another app entirely — so `blur` is the only
+  // reliable signal for "clicked away". Requires the panel to have been
+  // focused on menu-open (see onWrapperContextMenu).
+  useEffect(() => {
+    if (!isCommandMenuOpen) return;
+    const handleBlur = () => setIsCommandMenuOpen(false);
+    window.addEventListener("blur", handleBlur);
+    return () => window.removeEventListener("blur", handleBlur);
+  }, [isCommandMenuOpen]);
+
   // Restore the user's last-dragged panel position on mount. Mid-drag
   // updates are not persisted — we only save on mouseup (see
   // onWrapperMouseUp). If no stored position exists, the main process's
@@ -374,7 +387,14 @@ export default function App() {
     e.preventDefault();
     if (!hasDraggedRef.current) {
       setWindowInteractivity(true);
-      setIsCommandMenuOpen((prev) => !prev);
+      setIsCommandMenuOpen((prev) => {
+        const next = !prev;
+        // Focus the panel when opening so Escape works and so clicking
+        // away emits a window `blur` we can use to dismiss the menu. The
+        // panel is otherwise a non-activating overlay (showInactive).
+        if (next) window.electronAPI?.focusMainWindow?.();
+        return next;
+      });
     }
   };
 

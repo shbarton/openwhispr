@@ -309,6 +309,7 @@ contextBridge.exposeInMainWorld("electronAPI", {
   getMainWindowBounds: () => ipcRenderer.invoke("get-main-window-bounds"),
   setMainWindowPosition: (position) =>
     ipcRenderer.invoke("set-main-window-position", position),
+  focusMainWindow: () => ipcRenderer.invoke("focus-main-window"),
   setMainWindowInteractivity: (interactive) =>
     ipcRenderer.invoke("set-main-window-interactivity", interactive),
   setNotificationInteractivity: (interactive) =>

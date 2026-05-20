@@ -536,6 +536,19 @@ class WindowManager {
     return await this.dragManager.stopWindowDrag();
   }
 
+  // The dictation panel is normally shown with showInactive() so it never
+  // steals focus from the user's active app. But a transient interaction
+  // like the right-click command menu needs keyboard focus so Escape works
+  // and so the window emits a `blur` event when the user clicks away (which
+  // the renderer uses to dismiss the menu). Call this when opening the menu.
+  focusMainWindow() {
+    if (!this.mainWindow || this.mainWindow.isDestroyed()) {
+      return { success: false, message: "Window not available" };
+    }
+    this.mainWindow.focus();
+    return { success: true };
+  }
+
   getMainWindowBounds() {
     if (!this.mainWindow || this.mainWindow.isDestroyed()) {
       return null;

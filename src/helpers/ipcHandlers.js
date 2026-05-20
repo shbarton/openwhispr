@@ -2315,6 +2315,10 @@ class IPCHandlers {
       return this.windowManager.setMainWindowPosition(position || {});
     });
 
+    ipcMain.handle("focus-main-window", async () => {
+      return this.windowManager.focusMainWindow();
+    });
+
     ipcMain.handle("open-external", async (event, url) => {
       try {
         await shell.openExternal(url);
