@@ -2868,6 +2868,7 @@ registerProcessor("pcm-streaming-processor", PCMStreamingProcessor);
   cleanup() {
     this.lastAudioBlob = null;
     this.lastAudioMetadata = null;
+    this._stopLevelMonitor();
     if (this.isStreaming) {
       this.cleanupStreaming();
     }

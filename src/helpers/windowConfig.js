@@ -45,8 +45,8 @@ const WINDOW_SIZES = {
 
 // Main dictation window configuration
 const MAIN_WINDOW_CONFIG = {
-  width: WINDOW_SIZES.BASE.width,
-  height: WINDOW_SIZES.BASE.height,
+  width: WINDOW_SIZES.BAR.width,
+  height: WINDOW_SIZES.BAR.height,
   title: "Voice Recorder",
   webPreferences: {
     preload: path.join(__dirname, "..", "..", "preload.js"),
@@ -160,6 +160,16 @@ const TRANSCRIPTION_PREVIEW_CONFIG = {
 };
 
 class WindowPositionUtil {
+  // Clamp a window rect to a display's work area so it can't be pushed
+  // offscreen (stale stored coords, disconnected monitor, resolution change).
+  static clampToWorkArea(x, y, width, height, display) {
+    const workArea = display.workArea || display.bounds;
+    return {
+      x: Math.max(workArea.x, Math.min(x, workArea.x + workArea.width - width)),
+      y: Math.max(workArea.y, Math.min(y, workArea.y + workArea.height - height)),
+    };
+  }
+
   static getMainWindowPosition(display, customSize = null, position = "bottom-right") {
     const { width, height } = customSize || WINDOW_SIZES.BASE;
     const MARGIN = 4;

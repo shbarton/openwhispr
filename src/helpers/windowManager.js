@@ -38,9 +38,8 @@ class WindowManager {
     this._cachedActivationMode = "tap";
     this._floatingIconAutoHide = false;
     this._agentAnimationState = null;
-    // Default to bottom-center for the new SpellStream-style bar widget.
-    // The user setting may override this via _panelStartPosition mutators —
-    // see `setPanelStartPosition` and onboarding code.
+    // bottom-center default; overridden by the user setting via the
+    // _panelStartPosition mutators.
     this._panelStartPosition = "center";
     this._isDictatingToggle = false;
 
@@ -145,7 +144,6 @@ class WindowManager {
       x: currentBounds.x + currentBounds.width / 2,
       y: currentBounds.y + currentBounds.height,
     });
-    const workArea = display.workArea || display.bounds;
 
     let newX, newY;
 
@@ -165,13 +163,17 @@ class WindowManager {
       newY = currentBounds.y + currentBounds.height - newSize.height;
     }
 
-    // Clamp to work area
-    newX = Math.max(workArea.x, Math.min(newX, workArea.x + workArea.width - newSize.width));
-    newY = Math.max(workArea.y, Math.min(newY, workArea.y + workArea.height - newSize.height));
+    const clamped = WindowPositionUtil.clampToWorkArea(
+      newX,
+      newY,
+      newSize.width,
+      newSize.height,
+      display
+    );
 
     this.mainWindow.setBounds({
-      x: newX,
-      y: newY,
+      x: clamped.x,
+      y: clamped.y,
       width: newSize.width,
       height: newSize.height,
     });
@@ -570,20 +572,11 @@ class WindowManager {
 
     const bounds = this.mainWindow.getBounds();
     const display = screen.getDisplayNearestPoint({ x, y });
-    const workArea = display.workArea || display.bounds;
-
-    const clampedX = Math.max(
-      workArea.x,
-      Math.min(x, workArea.x + workArea.width - bounds.width)
-    );
-    const clampedY = Math.max(
-      workArea.y,
-      Math.min(y, workArea.y + workArea.height - bounds.height)
-    );
+    const clamped = WindowPositionUtil.clampToWorkArea(x, y, bounds.width, bounds.height, display);
 
     this.mainWindow.setBounds({
-      x: Math.round(clampedX),
-      y: Math.round(clampedY),
+      x: Math.round(clamped.x),
+      y: Math.round(clamped.y),
       width: bounds.width,
       height: bounds.height,
     });

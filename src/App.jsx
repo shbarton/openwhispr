@@ -62,16 +62,13 @@ export default function App() {
   const { hotkey } = useHotkey();
   const { isDragging, handleMouseDown, handleMouseUp } = useWindowDrag();
 
-  const [dragStartPos, setDragStartPos] = useState(null);
+  const dragStartPosRef = useRef(null);
   const hasDraggedRef = useRef(false);
 
-  // Animation clock for the bar's synthetic shimmer / ripple animations.
   const [animationTime, setAnimationTime] = useState(0);
 
-  // Mic levels sampled from the AudioManager's silence analyser at ~10Hz.
-  // A ref carries the latest sample to avoid re-rendering the whole tree on
-  // every tick; the rAF animation loop copies it into state so the bar
-  // updates roughly with each frame.
+  // A ref carries the latest sample (written ~10Hz by AudioManager) so that
+  // write alone doesn't re-render; the rAF loop copies it into state.
   const levelsRef = useRef(ZERO_LEVELS);
   const [levels, setLevels] = useState(ZERO_LEVELS);
   const handleLevels = React.useCallback((next) => {
@@ -299,12 +296,15 @@ export default function App() {
     }
   }, []);
 
-  // Advance the animation clock and republish the latest mic levels at rAF
-  // cadence. The View clamps to 30fps internally via CSS, so we don't need
-  // to throttle here. The levels ref is updated by AudioManager at ~10Hz;
-  // copying it into state on every frame lets the bars decay smoothly
-  // between samples instead of stepping.
+  const barState = isRecording ? "recording" : isProcessing ? "transcribing" : "idle";
+
+  // Drive animationTime + level republishing only while the bar is visible
+  // as recording/transcribing. The idle bar uses neither, so running the
+  // loop there would re-render the overlay 60fps for nothing. The ref is
+  // updated by AudioManager at ~10Hz; copying it each frame lets the bars
+  // decay smoothly between samples.
   useEffect(() => {
+    if (barState === "idle") return;
     let raf;
     const start = performance.now();
     const tick = (now) => {
@@ -314,22 +314,8 @@ export default function App() {
     };
     raf = requestAnimationFrame(tick);
     return () => cancelAnimationFrame(raf);
-  }, []);
+  }, [barState]);
 
-  // Clear lingering mic data when we're not actively recording so the bar
-  // falls back to its synthetic shimmer baseline.
-  useEffect(() => {
-    if (!isRecording) {
-      levelsRef.current = ZERO_LEVELS;
-      setLevels(ZERO_LEVELS);
-    }
-  }, [isRecording]);
-
-  // Map useAudioRecording booleans → 3-state bar machine.
-  const barState = isRecording ? "recording" : isProcessing ? "transcribing" : "idle";
-
-  // Suppress click actions if the user just dragged the window. Mirrors the
-  // 5px threshold the round-button design used.
   const guardClick = React.useCallback((fn) => {
     return () => {
       if (hasDraggedRef.current) return;
@@ -338,11 +324,8 @@ export default function App() {
     };
   }, []);
 
-  const handleStartRecording = useMemo(
-    () => guardClick(() => toggleListening()),
-    [guardClick, toggleListening]
-  );
-  const handleStop = useMemo(
+  // Idle-click-to-start and recording's Stop both just toggle listening.
+  const handleToggle = useMemo(
     () => guardClick(() => toggleListening()),
     [guardClick, toggleListening]
   );
@@ -357,15 +340,15 @@ export default function App() {
 
   const onWrapperMouseDown = (e) => {
     setIsCommandMenuOpen(false);
-    setDragStartPos({ x: e.clientX, y: e.clientY });
+    dragStartPosRef.current = { x: e.clientX, y: e.clientY };
     hasDraggedRef.current = false;
     handleMouseDown(e);
   };
 
   const onWrapperMouseMove = (e) => {
-    if (dragStartPos && !hasDraggedRef.current) {
-      const distance = Math.hypot(e.clientX - dragStartPos.x, e.clientY - dragStartPos.y);
-      if (distance > DRAG_THRESHOLD_PX) {
+    const start = dragStartPosRef.current;
+    if (start && !hasDraggedRef.current) {
+      if (Math.hypot(e.clientX - start.x, e.clientY - start.y) > DRAG_THRESHOLD_PX) {
         hasDraggedRef.current = true;
       }
     }
@@ -373,7 +356,7 @@ export default function App() {
 
   const onWrapperMouseUp = (e) => {
     handleMouseUp(e);
-    setDragStartPos(null);
+    dragStartPosRef.current = null;
     // Persist the new position only if the user actually moved the window.
     // Otherwise we'd overwrite the stored bounds on every plain click.
     if (hasDraggedRef.current) {
@@ -385,17 +368,14 @@ export default function App() {
 
   const onWrapperContextMenu = (e) => {
     e.preventDefault();
-    if (!hasDraggedRef.current) {
-      setWindowInteractivity(true);
-      setIsCommandMenuOpen((prev) => {
-        const next = !prev;
-        // Focus the panel when opening so Escape works and so clicking
-        // away emits a window `blur` we can use to dismiss the menu. The
-        // panel is otherwise a non-activating overlay (showInactive).
-        if (next) window.electronAPI?.focusMainWindow?.();
-        return next;
-      });
-    }
+    if (hasDraggedRef.current) return;
+    setWindowInteractivity(true);
+    const opening = !isCommandMenuOpen;
+    setIsCommandMenuOpen(opening);
+    // Focus the panel when opening so Escape works and so clicking away
+    // emits a window `blur` we use to dismiss the menu — the panel is
+    // otherwise a non-activating overlay (showInactive).
+    if (opening) window.electronAPI?.focusMainWindow?.();
   };
 
   return (
@@ -435,8 +415,8 @@ export default function App() {
           animationTime={animationTime}
           errorMessage={null}
           showSlowMessage={false}
-          onStartRecording={handleStartRecording}
-          onStop={handleStop}
+          onStartRecording={handleToggle}
+          onStop={handleToggle}
           onCancel={handleCancel}
         />
 
