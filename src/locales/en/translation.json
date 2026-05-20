@@ -1753,6 +1753,7 @@
   },
   "sidebar": {
     "home": "Home",
+    "dictation": "Dictation",
     "notes": "Notes",
     "upload": "Upload",
     "dictionary": "Dictionary",
@@ -1769,6 +1770,22 @@
     "defaultUser": "User",
     "notSignedIn": "Not signed in",
     "chat": "Chat"
+  },
+  "dashboard": {
+    "greeting": {
+      "morning": "Good morning.",
+      "morningWithName": "Good morning, {{name}}.",
+      "afternoon": "Good afternoon.",
+      "afternoonWithName": "Good afternoon, {{name}}.",
+      "evening": "Good evening.",
+      "eveningWithName": "Good evening, {{name}}."
+    },
+    "upcomingMeetings": "Upcoming meetings",
+    "recentTranscripts": "Recent transcripts",
+    "viewAll": "View all",
+    "noTranscripts": "No transcripts yet",
+    "noUpcomingMeetings": "No upcoming meetings",
+    "connectCalendar": "Connect a calendar"
   },
   "chat": {
     "newChat": "New chat",

@@ -12,6 +12,8 @@ import { canManageSystemAudioInApp } from "../utils/systemAudioAccess";
 interface UpcomingMeetingsProps {
   events: CalendarEvent[];
   isLoading: boolean;
+  className?: string;
+  showHeader?: boolean;
 }
 
 const getJoinUrl = (event: CalendarEvent): string | null => {
@@ -37,7 +39,12 @@ const openJoinUrl = (url: string) => {
   }
 };
 
-export default function UpcomingMeetings({ events, isLoading }: UpcomingMeetingsProps) {
+export default function UpcomingMeetings({
+  events,
+  isLoading,
+  className,
+  showHeader = true,
+}: UpcomingMeetingsProps) {
   const { t, i18n } = useTranslation();
   const [hoveredEventId, setHoveredEventId] = useState<string | null>(null);
   const systemAudio = useSystemAudioPermission();
@@ -87,14 +94,16 @@ export default function UpcomingMeetings({ events, isLoading }: UpcomingMeetings
   };
 
   return (
-    <div className="w-64 sticky top-0 self-start max-h-screen overflow-y-auto">
+    <div className={cn(className ?? "w-64 sticky top-0 self-start max-h-screen overflow-y-auto")}>
       {/* Header */}
-      <div className="flex items-center gap-1.5 pb-2.5">
-        <Calendar size={12} className="text-muted-foreground" />
-        <span className="text-[11px] font-semibold text-muted-foreground uppercase tracking-wide">
-          {t("upcoming.title")}
-        </span>
-      </div>
+      {showHeader && (
+        <div className="flex items-center gap-1.5 pb-2.5">
+          <Calendar size={12} className="text-muted-foreground" />
+          <span className="text-[11px] font-semibold text-muted-foreground uppercase tracking-wide">
+            {t("upcoming.title")}
+          </span>
+        </div>
+      )}
 
       {/* Loading state */}
       {isLoading && (

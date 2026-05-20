@@ -41,6 +41,7 @@ import {
 } from "../stores/noteStore";
 import { fetchProviders as fetchStreamingProviders } from "../stores/streamingProvidersStore";
 import HistoryView from "./HistoryView";
+import DashboardView from "./DashboardView";
 import { syncService } from "../services/SyncService.js";
 
 const platform = getCachedPlatform();
@@ -678,7 +679,7 @@ export default function ControlPanel() {
               setActiveView("personal-notes");
             }}
             onTranscriptSelect={() => {
-              setActiveView("home");
+              setActiveView("dictation");
             }}
           />
         </Suspense>
@@ -838,15 +839,29 @@ export default function ControlPanel() {
                 </div>
               )}
             {activeView === "home" && (
-              <HistoryView
+              <DashboardView
                 history={history}
                 isLoading={isLoading}
                 hotkey={hotkey}
+                userName={user?.name}
                 showCloudMigrationBanner={showCloudMigrationBanner}
                 setShowCloudMigrationBanner={setShowCloudMigrationBanner}
                 aiCTADismissed={aiCTADismissed}
                 setAiCTADismissed={setAiCTADismissed}
                 useCleanupModel={useCleanupModel}
+                copyToClipboard={copyToClipboard}
+                onViewChange={setActiveView}
+                onOpenSettings={(section) => {
+                  setSettingsSection(section);
+                  setShowSettings(true);
+                }}
+              />
+            )}
+            {activeView === "dictation" && (
+              <HistoryView
+                history={history}
+                isLoading={isLoading}
+                hotkey={hotkey}
                 copyToClipboard={copyToClipboard}
                 deleteTranscription={deleteTranscription}
                 clearAllTranscriptions={clearAllTranscriptions}

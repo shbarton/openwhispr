@@ -1,6 +1,7 @@
 import React, { useState } from "react";
 import {
   Home,
+  Mic,
   MessageSquare,
   NotebookPen,
   BookOpen,
@@ -24,6 +25,7 @@ const platform = getCachedPlatform();
 
 export type ControlPanelView =
   | "home"
+  | "dictation"
   | "chat"
   | "personal-notes"
   | "dictionary"
@@ -84,6 +86,7 @@ export default function ControlPanelSidebar({
     icon: React.ComponentType<{ size?: number; strokeWidth?: number; className?: string }>;
   }[] = [
     { id: "home", label: t("sidebar.home"), icon: Home },
+    { id: "dictation", label: t("sidebar.dictation"), icon: Mic },
     { id: "chat", label: t("sidebar.chat"), icon: MessageSquare },
     { id: "personal-notes", label: t("sidebar.notes"), icon: NotebookPen },
     { id: "upload", label: t("sidebar.upload"), icon: Upload },
