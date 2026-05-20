@@ -218,12 +218,15 @@ registerProcessor("pcm-streaming-processor", PCMStreamingProcessor);
     this.onLevels = onLevels;
   }
 
-  // Average a byte-frequency array into `out.length` buckets clipped to the
-  // voice band (~0-4 kHz: bin ~170 at fftSize 2048 / 44.1-48 kHz). Values are
-  // normalized 0-1. Shared by the non-streaming silence loop and the
-  // streaming level monitor so the visualizer reads identically in both.
-  _computeBucketLevels(freqArray, out) {
-    const buckets = out.length;
+  // Average a byte-frequency array into 12 buckets clipped to the voice band
+  // (~0-4 kHz: bin ~170 at fftSize 2048 / 44.1-48 kHz). Values normalized 0-1.
+  // Returns a FRESH array each call — consumers (React) rely on reference
+  // identity to detect change, so we must not mutate-and-reuse a buffer or
+  // the visualizer's useMemo never recomputes and the bars stay flat.
+  // Shared by the non-streaming silence loop and the streaming level monitor.
+  _computeBucketLevels(freqArray) {
+    const buckets = 12;
+    const out = new Array(buckets);
     const voiceBinLimit = Math.min(freqArray.length, 170);
     const binsPerBucket = Math.max(1, Math.floor(voiceBinLimit / buckets));
     for (let b = 0; b < buckets; b++) {
@@ -249,12 +252,10 @@ registerProcessor("pcm-streaming-processor", PCMStreamingProcessor);
       this._levelAnalyser.smoothingTimeConstant = 0.8;
       sourceNode.connect(this._levelAnalyser);
       const freqArray = new Uint8Array(this._levelAnalyser.frequencyBinCount);
-      const bucketLevels = new Array(12).fill(0);
       this._levelInterval = setInterval(() => {
         if (!this._levelAnalyser) return;
         this._levelAnalyser.getByteFrequencyData(freqArray);
-        this._computeBucketLevels(freqArray, bucketLevels);
-        this.onLevels?.(bucketLevels);
+        this.onLevels?.(this._computeBucketLevels(freqArray));
       }, 100);
     } catch (e) {
       logger.warn("Level monitor setup failed", { error: e.message }, "audio");
@@ -427,9 +428,6 @@ registerProcessor("pcm-streaming-processor", PCMStreamingProcessor);
         this._localSpeechGateState = createLocalSpeechGateState();
         const dataArray = new Uint8Array(this._silenceAnalyser.fftSize);
         const freqArray = new Uint8Array(this._silenceAnalyser.frequencyBinCount);
-        // We render 12 bars in the transcription bar; the View mirrors them
-        // into 24 to make the center loudest.
-        const bucketLevels = new Array(12).fill(0);
         this._silenceInterval = setInterval(() => {
           this._silenceAnalyser.getByteTimeDomainData(dataArray);
           let sum = 0;
@@ -445,8 +443,8 @@ registerProcessor("pcm-streaming-processor", PCMStreamingProcessor);
 
           if (this.onLevels) {
             this._silenceAnalyser.getByteFrequencyData(freqArray);
-            this._computeBucketLevels(freqArray, bucketLevels);
-            this.onLevels(bucketLevels);
+            // Fresh array each emit — see _computeBucketLevels.
+            this.onLevels(this._computeBucketLevels(freqArray));
           }
         }, 100);
       } catch (e) {
