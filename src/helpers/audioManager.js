@@ -111,6 +111,8 @@ class AudioManager {
     this.onTranscriptionComplete = null;
     this.onPartialTranscript = null;
     this.onLevels = null;
+    this._levelAnalyser = null;
+    this._levelInterval = null;
     this.cachedApiKey = null;
     this.cachedApiKeyProvider = null;
 
@@ -214,6 +216,65 @@ registerProcessor("pcm-streaming-processor", PCMStreamingProcessor);
     this.onPartialTranscript = onPartialTranscript;
     this.onStreamingCommit = onStreamingCommit;
     this.onLevels = onLevels;
+  }
+
+  // Average a byte-frequency array into `out.length` buckets clipped to the
+  // voice band (~0-4 kHz: bin ~170 at fftSize 2048 / 44.1-48 kHz). Values are
+  // normalized 0-1. Shared by the non-streaming silence loop and the
+  // streaming level monitor so the visualizer reads identically in both.
+  _computeBucketLevels(freqArray, out) {
+    const buckets = out.length;
+    const voiceBinLimit = Math.min(freqArray.length, 170);
+    const binsPerBucket = Math.max(1, Math.floor(voiceBinLimit / buckets));
+    for (let b = 0; b < buckets; b++) {
+      const start = b * binsPerBucket;
+      const end = b === buckets - 1 ? voiceBinLimit : start + binsPerBucket;
+      let sum = 0;
+      for (let i = start; i < end; i++) sum += freqArray[i];
+      out[b] = sum / ((end - start) * 255);
+    }
+    return out;
+  }
+
+  // Tap a source node with a dedicated AnalyserNode and emit 12 voice-band
+  // levels via onLevels at ~10Hz. Used by the streaming path, which has no
+  // silence analyser to piggyback on (the non-streaming path computes levels
+  // inline in its silence-detection loop). No-op if no onLevels consumer.
+  _startLevelMonitor(sourceNode, audioContext) {
+    if (!this.onLevels || !sourceNode || !audioContext) return;
+    this._stopLevelMonitor();
+    try {
+      this._levelAnalyser = audioContext.createAnalyser();
+      this._levelAnalyser.fftSize = 2048;
+      this._levelAnalyser.smoothingTimeConstant = 0.8;
+      sourceNode.connect(this._levelAnalyser);
+      const freqArray = new Uint8Array(this._levelAnalyser.frequencyBinCount);
+      const bucketLevels = new Array(12).fill(0);
+      this._levelInterval = setInterval(() => {
+        if (!this._levelAnalyser) return;
+        this._levelAnalyser.getByteFrequencyData(freqArray);
+        this._computeBucketLevels(freqArray, bucketLevels);
+        this.onLevels?.(bucketLevels);
+      }, 100);
+    } catch (e) {
+      logger.warn("Level monitor setup failed", { error: e.message }, "audio");
+      this._stopLevelMonitor();
+    }
+  }
+
+  _stopLevelMonitor() {
+    if (this._levelInterval) {
+      clearInterval(this._levelInterval);
+      this._levelInterval = null;
+    }
+    if (this._levelAnalyser) {
+      try {
+        this._levelAnalyser.disconnect();
+      } catch {
+        // already disconnected
+      }
+      this._levelAnalyser = null;
+    }
   }
 
   setSkipReasoning(skip) {
@@ -368,12 +429,7 @@ registerProcessor("pcm-streaming-processor", PCMStreamingProcessor);
         const freqArray = new Uint8Array(this._silenceAnalyser.frequencyBinCount);
         // We render 12 bars in the transcription bar; the View mirrors them
         // into 24 to make the center loudest.
-        const LEVEL_BUCKETS = 12;
-        const bucketLevels = new Array(LEVEL_BUCKETS).fill(0);
-        // Voice energy lives mostly below ~4 kHz. With fftSize 2048 and an
-        // assumed 44.1/48 kHz context, bin N covers ~24 Hz; bin 170 ≈ 4 kHz.
-        const VOICE_BIN_LIMIT = Math.min(freqArray.length, 170);
-        const binsPerBucket = Math.max(1, Math.floor(VOICE_BIN_LIMIT / LEVEL_BUCKETS));
+        const bucketLevels = new Array(12).fill(0);
         this._silenceInterval = setInterval(() => {
           this._silenceAnalyser.getByteTimeDomainData(dataArray);
           let sum = 0;
@@ -389,14 +445,7 @@ registerProcessor("pcm-streaming-processor", PCMStreamingProcessor);
 
           if (this.onLevels) {
             this._silenceAnalyser.getByteFrequencyData(freqArray);
-            for (let b = 0; b < LEVEL_BUCKETS; b++) {
-              const start = b * binsPerBucket;
-              const end = b === LEVEL_BUCKETS - 1 ? VOICE_BIN_LIMIT : start + binsPerBucket;
-              let bucketSum = 0;
-              for (let i = start; i < end; i++) bucketSum += freqArray[i];
-              // Byte FFT values are 0-255; normalize to 0-1.
-              bucketLevels[b] = bucketSum / ((end - start) * 255);
-            }
+            this._computeBucketLevels(freqArray, bucketLevels);
             this.onLevels(bucketLevels);
           }
         }, 100);
@@ -2251,6 +2300,12 @@ registerProcessor("pcm-streaming-processor", PCMStreamingProcessor);
       this.isStreaming = true;
       this.streamingSource.connect(this.streamingProcessor);
 
+      // Drive the transcription-bar waveform from the same mic source. The
+      // streaming path has no silence analyser to piggyback on, so use a
+      // dedicated level monitor. Tapping the source for read-only analysis
+      // doesn't affect the PCM frames flowing to the worklet.
+      this._startLevelMonitor(this.streamingSource, audioContext);
+
       const tPipeline = performance.now();
 
       // 3. Register IPC event listeners BEFORE connecting, so no transcript
@@ -2440,6 +2495,7 @@ registerProcessor("pcm-streaming-processor", PCMStreamingProcessor);
     this.isRecording = false;
     this.recordingStartTime = null;
     this.onStateChange?.({ isRecording: false, isProcessing: true, isStreaming: false });
+    this._stopLevelMonitor();
 
     // 2. Stop the processor — it flushes its remaining buffer on "stop".
     //    Keep isStreaming TRUE so the port.onmessage handler forwards the flush to WebSocket.
@@ -2752,6 +2808,7 @@ registerProcessor("pcm-streaming-processor", PCMStreamingProcessor);
   }
 
   cleanupStreamingAudio() {
+    this._stopLevelMonitor();
     if (this.streamingFallbackRecorder?.state === "recording") {
       try {
         this.streamingFallbackRecorder.stop();
