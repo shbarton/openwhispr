@@ -259,18 +259,21 @@ export default function App() {
 
   useEffect(() => {
     const handleKeyPress = (e) => {
-      if (e.key === "Escape") {
-        if (isCommandMenuOpen) {
-          setIsCommandMenuOpen(false);
-        } else {
-          handleClose();
-        }
+      if (e.key !== "Escape") return;
+      if (isCommandMenuOpen) {
+        setIsCommandMenuOpen(false);
+      } else if (isRecording) {
+        cancelRecording();
+      } else if (isProcessing) {
+        cancelProcessing();
+      } else {
+        handleClose();
       }
     };
 
     document.addEventListener("keydown", handleKeyPress);
     return () => document.removeEventListener("keydown", handleKeyPress);
-  }, [isCommandMenuOpen]);
+  }, [isCommandMenuOpen, isRecording, isProcessing, cancelRecording, cancelProcessing]);
 
   // Dismiss the command menu when the panel loses focus (i.e. the user
   // clicked another app/window). Clicks landing outside the small overlay

@@ -143,6 +143,7 @@ class AudioManager {
     this.workletBlobUrl = null;
     this.streamingStartInProgress = false;
     this.stopRequestedDuringStreamingStart = false;
+    this.cancelRequestedDuringStreamingStart = false;
     this.streamingFallbackRecorder = null;
     this.streamingFallbackChunks = [];
     this.skipReasoning = false;
@@ -2238,6 +2239,7 @@ registerProcessor("pcm-streaming-processor", PCMStreamingProcessor);
       }
 
       this.stopRequestedDuringStreamingStart = false;
+      this.cancelRequestedDuringStreamingStart = false;
 
       const t0 = performance.now();
       const constraints = await this.getAudioConstraints();
@@ -2431,6 +2433,12 @@ registerProcessor("pcm-streaming-processor", PCMStreamingProcessor);
       );
 
       this.streamingStartInProgress = false;
+      if (this.cancelRequestedDuringStreamingStart) {
+        this.cancelRequestedDuringStreamingStart = false;
+        this.stopRequestedDuringStreamingStart = false;
+        logger.debug("Applying deferred streaming cancel requested during startup", {}, "streaming");
+        return this.cancelStreamingRecording();
+      }
       if (this.stopRequestedDuringStreamingStart) {
         this.stopRequestedDuringStreamingStart = false;
         logger.debug("Applying deferred streaming stop requested during startup", {}, "streaming");
@@ -2440,6 +2448,7 @@ registerProcessor("pcm-streaming-processor", PCMStreamingProcessor);
     } catch (error) {
       this.streamingStartInProgress = false;
       this.stopRequestedDuringStreamingStart = false;
+      this.cancelRequestedDuringStreamingStart = false;
       logger.error("Failed to start streaming recording", { error: error.message }, "streaming");
 
       let errorTitle = "Streaming Error";
@@ -2771,6 +2780,87 @@ registerProcessor("pcm-streaming-processor", PCMStreamingProcessor);
     if (this.shouldUseStreaming()) {
       this.warmupStreamingConnection().catch((e) => {
         logger.debug("Background re-warm failed", { error: e.message }, "streaming");
+      });
+    }
+
+    return true;
+  }
+
+  // Discard an in-progress streaming dictation: tear down the audio graph and
+  // close the provider WITHOUT flushing the buffer, finalizing, running
+  // reasoning, or pasting. The counterpart to stopStreamingRecording (which
+  // commits). Used by the Escape/cancel path.
+  async cancelStreamingRecording() {
+    if (this.streamingStartInProgress) {
+      // Start hasn't finished wiring the pipeline yet — defer; the start
+      // routine will cancel on completion.
+      this.cancelRequestedDuringStreamingStart = true;
+      return true;
+    }
+    if (!this.isStreaming) return false;
+
+    logger.info("Cancelling streaming dictation (discarding transcript)", {}, "streaming");
+
+    // Stop forwarding audio frames immediately so the worklet flush (if any)
+    // is dropped by the port.onmessage isStreaming guard.
+    this.isStreaming = false;
+    this._stopLevelMonitor();
+
+    if (this.streamingProcessor) {
+      try {
+        this.streamingProcessor.disconnect();
+      } catch {
+        // already disconnected
+      }
+      this.streamingProcessor = null;
+    }
+    if (this.streamingSource) {
+      try {
+        this.streamingSource.disconnect();
+      } catch {
+        // already disconnected
+      }
+      this.streamingSource = null;
+    }
+    this.streamingAudioContext = null;
+
+    if (this.streamingFallbackRecorder?.state === "recording") {
+      try {
+        this.streamingFallbackRecorder.stop();
+      } catch {
+        // ignore
+      }
+    }
+    this.streamingFallbackRecorder = null;
+    this.streamingFallbackChunks = [];
+
+    if (this.streamingStream) {
+      this.streamingStream.getTracks().forEach((track) => track.stop());
+      this.streamingStream = null;
+    }
+
+    // Discard any accumulated transcript so nothing can be committed/pasted.
+    this.streamingFinalText = "";
+    this.streamingPartialText = "";
+
+    // Close the provider connection. We do NOT call finalize() and ignore any
+    // returned text — this is a discard, not a commit.
+    const provider = this.getStreamingProvider();
+    await provider.stop().catch((e) => {
+      logger.debug("Streaming cancel disconnect error", { error: e.message }, "streaming");
+    });
+
+    this.cleanupStreamingListeners();
+    this.cleanupPreview({ dismiss: true });
+
+    this.isRecording = false;
+    this.isProcessing = false;
+    this.recordingStartTime = null;
+    this.onStateChange?.({ isRecording: false, isProcessing: false, isStreaming: false });
+
+    if (this.shouldUseStreaming()) {
+      this.warmupStreamingConnection().catch((e) => {
+        logger.debug("Background re-warm after cancel failed", { error: e.message }, "streaming");
       });
     }
 

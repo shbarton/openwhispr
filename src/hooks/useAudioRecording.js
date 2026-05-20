@@ -275,8 +275,8 @@ export const useAudioRecording = (toast, options = {}) => {
       if (getSettings().pauseMediaOnDictation) {
         window.electronAPI?.resumeMediaPlayback?.();
       }
-      if (state.isStreaming) {
-        return await audioManagerRef.current.stopStreamingRecording();
+      if (state.isStreaming || state.isStreamingStartInProgress) {
+        return await audioManagerRef.current.cancelStreamingRecording();
       }
       return audioManagerRef.current.cancelRecording();
     }
