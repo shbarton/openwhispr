@@ -271,11 +271,10 @@ export const useAudioRecording = (toast, options = {}) => {
   const cancelRecording = useCallback(async () => {
     if (audioManagerRef.current) {
       window.electronAPI?.unregisterCancelHotkey?.();
-      const state = audioManagerRef.current.getState();
       if (getSettings().pauseMediaOnDictation) {
         window.electronAPI?.resumeMediaPlayback?.();
       }
-      if (state.isStreaming || state.isStreamingStartInProgress) {
+      if (audioManagerRef.current.isInStreamingSession()) {
         return await audioManagerRef.current.cancelStreamingRecording();
       }
       return audioManagerRef.current.cancelRecording();

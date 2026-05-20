@@ -2407,6 +2407,7 @@ registerProcessor("pcm-streaming-processor", PCMStreamingProcessor);
         this.isRecording = false;
         this.recordingStartTime = null;
         this.stopRequestedDuringStreamingStart = false;
+        this.cancelRequestedDuringStreamingStart = false;
         await this.cleanupStreaming();
         this.onStateChange?.({ isRecording: false, isProcessing: false, isStreaming: false });
         this.streamingStartInProgress = false;
@@ -2435,7 +2436,6 @@ registerProcessor("pcm-streaming-processor", PCMStreamingProcessor);
       this.streamingStartInProgress = false;
       if (this.cancelRequestedDuringStreamingStart) {
         this.cancelRequestedDuringStreamingStart = false;
-        this.stopRequestedDuringStreamingStart = false;
         logger.debug("Applying deferred streaming cancel requested during startup", {}, "streaming");
         return this.cancelStreamingRecording();
       }
@@ -2790,7 +2790,7 @@ registerProcessor("pcm-streaming-processor", PCMStreamingProcessor);
   // close the provider WITHOUT flushing the buffer, finalizing, running
   // reasoning, or pasting. The counterpart to stopStreamingRecording (which
   // commits). Used by the Escape/cancel path.
-  async cancelStreamingRecording() {
+  cancelStreamingRecording() {
     if (this.streamingStartInProgress) {
       // Start hasn't finished wiring the pipeline yet — defer; the start
       // routine will cancel on completion.
@@ -2801,56 +2801,23 @@ registerProcessor("pcm-streaming-processor", PCMStreamingProcessor);
 
     logger.info("Cancelling streaming dictation (discarding transcript)", {}, "streaming");
 
-    // Stop forwarding audio frames immediately so the worklet flush (if any)
-    // is dropped by the port.onmessage isStreaming guard.
+    // Stop forwarding frames first so any worklet flush from the teardown
+    // below is dropped by the port.onmessage isStreaming guard. Then remove
+    // the provider listeners BEFORE closing the connection, so a late
+    // onFinal/onSessionEnd during the close handshake can't revive the
+    // discarded transcript or commit a segment.
     this.isStreaming = false;
-    this._stopLevelMonitor();
-
-    if (this.streamingProcessor) {
-      try {
-        this.streamingProcessor.disconnect();
-      } catch {
-        // already disconnected
-      }
-      this.streamingProcessor = null;
-    }
-    if (this.streamingSource) {
-      try {
-        this.streamingSource.disconnect();
-      } catch {
-        // already disconnected
-      }
-      this.streamingSource = null;
-    }
-    this.streamingAudioContext = null;
-
-    if (this.streamingFallbackRecorder?.state === "recording") {
-      try {
-        this.streamingFallbackRecorder.stop();
-      } catch {
-        // ignore
-      }
-    }
-    this.streamingFallbackRecorder = null;
-    this.streamingFallbackChunks = [];
-
-    if (this.streamingStream) {
-      this.streamingStream.getTracks().forEach((track) => track.stop());
-      this.streamingStream = null;
-    }
-
-    // Discard any accumulated transcript so nothing can be committed/pasted.
-    this.streamingFinalText = "";
-    this.streamingPartialText = "";
-
-    // Close the provider connection. We do NOT call finalize() and ignore any
-    // returned text — this is a discard, not a commit.
-    const provider = this.getStreamingProvider();
-    await provider.stop().catch((e) => {
-      logger.debug("Streaming cancel disconnect error", { error: e.message }, "streaming");
-    });
-
     this.cleanupStreamingListeners();
+    this.cleanupStreamingAudio();
+
+    // Close the provider connection — discard, so no finalize() and the
+    // result is ignored. Fire-and-forget so Escape feels instant.
+    this.getStreamingProvider()
+      .stop()
+      .catch((e) => {
+        logger.debug("Streaming cancel disconnect error", { error: e.message }, "streaming");
+      });
+
     this.cleanupPreview({ dismiss: true });
 
     this.isRecording = false;
@@ -2865,6 +2832,12 @@ registerProcessor("pcm-streaming-processor", PCMStreamingProcessor);
     }
 
     return true;
+  }
+
+  // True while a streaming dictation session is active or being set up — lets
+  // callers route cancel/stop without inspecting the individual flags.
+  isInStreamingSession() {
+    return this.isStreaming || this.streamingStartInProgress;
   }
 
   shouldShowPreviewCleanupState() {
