@@ -44,7 +44,6 @@ import {
   mergeTranscriptSegments,
   serializeTranscriptSegments,
 } from "../../utils/transcriptSpeakerState";
-import NoteParticipants from "./NoteParticipants";
 import MeetingMetadataRow from "./MeetingMetadataRow";
 import MeetingChatRail from "./MeetingChatRail";
 import { useOnFallingEdge } from "../../hooks/useOnFallingEdge";
@@ -306,10 +305,9 @@ export default function NoteEditor({
       prevNoteIdRef.current = note.id;
       autoShowDoneRef.current = false;
       return scheduleUiUpdate(() => {
-        // Meeting notes with the agent enabled get the chat in sidebar mode
-        // by default so the post-meeting flow is one less click to reach.
-        // All other notes start with the chat hidden.
-        setChatMode(useCliChat ? "sidebar" : "hidden");
+        // Every note opens with the chat in the sidebar so all notes share
+        // the same AI affordance (collapse to the rail to hide it).
+        setChatMode("sidebar");
         setDiarizedSegments(null);
         setIsDiarizing(false);
         setSpeakerMappings({});
@@ -322,7 +320,7 @@ export default function NoteEditor({
         editorRef.current?.commands.focus();
       });
     }
-  }, [isRecording, note.id, note.title, scheduleUiUpdate, useCliChat]);
+  }, [isRecording, note.id, note.title, scheduleUiUpdate]);
 
   useEffect(() => {
     window.electronAPI?.getSpeakerMappings?.(note.id).then((mappings) => {
@@ -340,7 +338,7 @@ export default function NoteEditor({
       embeddedChat.messages.length > 0
     ) {
       autoShowDoneRef.current = true;
-      return scheduleUiUpdate(() => setChatMode("floating"));
+      return scheduleUiUpdate(() => setChatMode("sidebar"));
     }
   }, [embeddedChat.activeConversationId, embeddedChat.messages.length, scheduleUiUpdate]);
 
@@ -590,19 +588,19 @@ export default function NoteEditor({
   const handleAskSubmit = useCallback(
     (text: string) => {
       if (chatMode === "hidden") {
-        // Meeting notes never use floating — they go straight to sidebar.
-        setChatMode(useCliChat ? "sidebar" : "floating");
+        // Chat always opens as a sidebar (all note types).
+        setChatMode("sidebar");
       }
       embeddedChat.sendMessage(text);
     },
-    [chatMode, embeddedChat, useCliChat]
+    [chatMode, embeddedChat]
   );
 
   const handleChatInputFocus = useCallback(() => {
     if (chatMode === "hidden") {
-      setChatMode(useCliChat ? "sidebar" : "floating");
+      setChatMode("sidebar");
     }
-  }, [chatMode, useCliChat]);
+  }, [chatMode]);
 
   const noteDate = formatNoteDate(note.created_at);
   const shortDate = formatShortDate(note.created_at);
@@ -638,10 +636,6 @@ export default function NoteEditor({
                 <LinkIcon size={11} className="shrink-0" />
                 <span className="truncate max-w-40">{calendarEventName}</span>
               </span>
-            )}
-            {/* For non-meeting notes, show only participants */}
-            {note.note_type !== "meeting" && (
-              <NoteParticipants noteId={note.id} participants={parsedParticipants} />
             )}
             {folders && onMoveToFolder && (
               <DropdownMenu
@@ -879,8 +873,9 @@ export default function NoteEditor({
             </div>
           </div>
 
-          {/* Inline metadata row for meeting notes */}
-          {note.note_type === "meeting" && onNoteMetadataUpdate && (
+          {/* Inline metadata row (project, tags, participants, description) —
+              shown on every note so all notes share the same affordances. */}
+          {onNoteMetadataUpdate && (
             <MeetingMetadataRow note={note} onUpdate={onNoteMetadataUpdate} />
           )}
         </div>
@@ -1006,7 +1001,7 @@ export default function NoteEditor({
             onNewChat={embeddedChat.startNewChat}
           />
         ))}
-      {chatMode === "hidden" && useCliChat && (
+      {chatMode === "hidden" && (
         <MeetingChatRail onExpand={() => setChatMode("sidebar")} />
       )}
     </div>
