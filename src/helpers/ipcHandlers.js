@@ -441,13 +441,16 @@ class IPCHandlers {
   // Push the current { folderName: absoluteDir } map into the mirror so it
   // writes to and globs across custom folder paths. Cheap (folders are few);
   // called before every mirror write/delete and after any folder change.
-  _refreshMirrorFolderDirs() {
+  // `extra` keeps an already-removed folder registered — db-delete-folder needs
+  // the deleted folder's dir to stay searchable while its files are removed.
+  _refreshMirrorFolderDirs(extra) {
     const markdownMirror = require("./markdownMirror");
     if (!markdownMirror.getBasePath()) return;
     const dirs = {};
     for (const f of this.databaseManager.getFolders()) {
       dirs[f.name] = this._resolveFolderDir(f);
     }
+    if (extra) dirs[extra.name] = this._resolveFolderDir(extra);
     markdownMirror.setFolderDirs(dirs);
   }
 
@@ -1123,12 +1126,7 @@ class IPCHandlers {
               // Never rm a user-owned directory; remove only this folder's
               // mirrored note files. Keep the deleted folder's dir registered
               // so the per-note globs can still locate them.
-              const dirs = {};
-              for (const f of this.databaseManager.getFolders()) {
-                dirs[f.name] = this._resolveFolderDir(f);
-              }
-              dirs[folder.name] = this._resolveFolderDir(folder);
-              markdownMirror.setFolderDirs(dirs);
+              this._refreshMirrorFolderDirs(folder);
               for (const noteId of result.noteIds ?? []) {
                 markdownMirror.deleteNote(noteId);
               }

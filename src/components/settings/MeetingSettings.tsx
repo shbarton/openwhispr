@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import {
   Cloud,
@@ -216,6 +216,9 @@ export function FolderLocationsPanel() {
     count: number;
   } | null>(null);
   const [newFolderName, setNewFolderName] = useState("");
+  // True while a Move/Leave choice is in flight, so dialog dismissal (Escape/
+  // overlay/Cancel) knows whether to revert the edited path field.
+  const moveActionRef = useRef(false);
   const [localNames, setLocalNames] = useState<Record<number, string>>({});
   const [confirmDelete, setConfirmDelete] = useState<{
     id: number;
@@ -506,7 +509,13 @@ export function FolderLocationsPanel() {
       <ThreeOptionDialog
         open={pending !== null}
         onOpenChange={(open) => {
-          if (!open) setPending(null);
+          if (!open) {
+            // Dismissed via Escape/overlay/Cancel without choosing Move or
+            // Leave — revert the edited path field to the saved value.
+            if (!moveActionRef.current && pending) revertLocal(pending.id);
+            moveActionRef.current = false;
+            setPending(null);
+          }
         }}
         title={t("settings.folders.moveTitle", "Move existing notes?")}
         description={
@@ -522,13 +531,12 @@ export function FolderLocationsPanel() {
         primaryText={t("settings.folders.move", "Move them")}
         secondaryText={t("settings.folders.leave", "Leave them")}
         onPrimary={() => {
+          moveActionRef.current = true;
           if (pending) save(pending.id, pending.path, true);
         }}
         onSecondary={() => {
+          moveActionRef.current = true;
           if (pending) save(pending.id, pending.path, false);
-        }}
-        onCancel={() => {
-          if (pending) revertLocal(pending.id);
         }}
       />
 

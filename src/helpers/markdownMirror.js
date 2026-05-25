@@ -367,17 +367,16 @@ class MarkdownMirror {
     return fs.existsSync(dirPath) ? dirPath : null;
   }
 
-  _globNoteFiles(noteId) {
+  // Files named `<noteId>-*` matching `predicate(filename)`, across every dir a
+  // note could live in (base subdirs + custom folder dirs).
+  _globByPrefix(noteId, predicate) {
     if (!this._basePath) return [];
-    const results = [];
     const prefix = `${noteId}-`;
+    const results = [];
     for (const dirPath of this._searchDirs()) {
       try {
         for (const file of fs.readdirSync(dirPath)) {
-          // Matches `-transcript.md` too, by design: writeNote's stale-cleanup
-          // relies on this to remove an orphaned sidecar when switching to
-          // template mode (which inlines the transcript and skips writeTranscript).
-          if (file.startsWith(prefix) && file.endsWith(".md")) {
+          if (file.startsWith(prefix) && predicate(file)) {
             results.push(path.join(dirPath, file));
           }
         }
@@ -386,23 +385,18 @@ class MarkdownMirror {
     return results;
   }
 
+  // Matches `-transcript.md` too, by design: writeNote's stale-cleanup relies on
+  // it to remove an orphaned sidecar when switching to template mode (which
+  // inlines the transcript and skips writeTranscript).
+  _globNoteFiles(noteId) {
+    return this._globByPrefix(noteId, (f) => f.endsWith(".md"));
+  }
+
   _globTranscriptFiles(noteId) {
-    if (!this._basePath) return [];
-    const results = [];
-    const prefix = `${noteId}-`;
-    for (const dirPath of this._searchDirs()) {
-      try {
-        for (const file of fs.readdirSync(dirPath)) {
-          if (
-            file.startsWith(prefix) &&
-            (file.endsWith("-transcript.md") || file.endsWith("-transcript.txt"))
-          ) {
-            results.push(path.join(dirPath, file));
-          }
-        }
-      } catch {}
-    }
-    return results;
+    return this._globByPrefix(
+      noteId,
+      (f) => f.endsWith("-transcript.md") || f.endsWith("-transcript.txt")
+    );
   }
 }
 
