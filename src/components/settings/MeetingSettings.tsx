@@ -11,6 +11,7 @@ import {
   RotateCcw,
   Plus,
   Trash2,
+  MoreHorizontal,
 } from "lucide-react";
 import { useSettingsStore } from "../../stores/settingsStore";
 import { InferenceModeSelector, SettingsRow, SettingsPanel } from "../ui/SettingsSection";
@@ -19,6 +20,13 @@ import { Toggle } from "../ui/toggle";
 import { Input } from "../ui/input";
 import { Button } from "../ui/button";
 import { ThreeOptionDialog, ConfirmDialog } from "../ui/dialog";
+import {
+  DropdownMenu,
+  DropdownMenuTrigger,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuSeparator,
+} from "../ui/dropdown-menu";
 import { useToast } from "../ui/useToast";
 import TranscriptionModelPicker from "../TranscriptionModelPicker";
 import SelfHostedPanel from "../SelfHostedPanel";
@@ -389,7 +397,8 @@ export function FolderLocationsPanel() {
                         setLocalNames((p) => ({ ...p, [folder.id]: folder.name }));
                     }}
                     aria-label={t("settings.folders.nameLabel", "Folder name")}
-                    className="h-8 text-xs font-medium min-w-0 flex-1"
+                    title={t("settings.folders.nameHint", "Click to rename")}
+                    className="h-8 text-xs font-medium min-w-0 flex-1 border-transparent bg-transparent px-2 shadow-none"
                   />
                 )}
                 <div className="flex items-center gap-1.5 w-full max-w-sm">
@@ -412,36 +421,51 @@ export function FolderLocationsPanel() {
                   >
                     <FolderOpen size={14} />
                   </Button>
-                  {folder.path && (
-                    <Button
-                      variant="ghost"
-                      size="sm"
-                      onClick={() => {
-                        setLocalPaths((p) => ({ ...p, [folder.id]: "" }));
-                        commit(folder, "");
-                      }}
-                      className="h-8 px-2 shrink-0"
-                      title={t("settings.folders.reset", "Reset to default")}
-                    >
-                      <RotateCcw size={14} />
-                    </Button>
-                  )}
-                  {!folder.is_default && (
-                    <Button
-                      variant="ghost"
-                      size="sm"
-                      onClick={() =>
-                        setConfirmDelete({
-                          id: folder.id,
-                          name: folder.name,
-                          count: counts[folder.id] || 0,
-                        })
-                      }
-                      className="h-8 px-2 shrink-0 text-muted-foreground hover:text-destructive"
-                      title={t("settings.folders.delete", "Delete folder")}
-                    >
-                      <Trash2 size={14} />
-                    </Button>
+                  {(folder.path || !folder.is_default) && (
+                    <DropdownMenu>
+                      <DropdownMenuTrigger asChild>
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          className="h-8 px-2 shrink-0 text-muted-foreground/60 hover:text-foreground data-[state=open]:text-foreground"
+                          title={t("settings.folders.more", "More")}
+                        >
+                          <MoreHorizontal size={14} />
+                        </Button>
+                      </DropdownMenuTrigger>
+                      <DropdownMenuContent align="end" sideOffset={4} className="min-w-40">
+                        {folder.path && (
+                          <DropdownMenuItem
+                            onClick={() => {
+                              setLocalPaths((p) => ({ ...p, [folder.id]: "" }));
+                              commit(folder, "");
+                            }}
+                            className="text-xs gap-2 rounded-md px-2 py-1"
+                          >
+                            <RotateCcw size={12} className="text-muted-foreground/60" />
+                            {t("settings.folders.reset", "Reset to default")}
+                          </DropdownMenuItem>
+                        )}
+                        {!folder.is_default && (
+                          <>
+                            {folder.path && <DropdownMenuSeparator />}
+                            <DropdownMenuItem
+                              onClick={() =>
+                                setConfirmDelete({
+                                  id: folder.id,
+                                  name: folder.name,
+                                  count: counts[folder.id] || 0,
+                                })
+                              }
+                              className="text-xs gap-2 rounded-md px-2 py-1 text-destructive focus:text-destructive"
+                            >
+                              <Trash2 size={12} />
+                              {t("settings.folders.delete", "Delete folder")}
+                            </DropdownMenuItem>
+                          </>
+                        )}
+                      </DropdownMenuContent>
+                    </DropdownMenu>
                   )}
                 </div>
               </div>
