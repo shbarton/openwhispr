@@ -7,6 +7,10 @@ class MarkdownMirror {
     this._basePath = null;
     this._templatePath = "";
     this._templateContent = null;
+    // { [folderName]: absoluteDir } — custom per-folder dirs resolved by
+    // ipcHandlers (folder.path ?? <base>/<name>). Lets the mirror write to and
+    // glob across folders that live outside the base path.
+    this._folderDirs = {};
   }
 
   init(basePath) {
@@ -21,6 +25,35 @@ class MarkdownMirror {
 
   getBasePath() {
     return this._basePath;
+  }
+
+  // ipcHandlers pushes the resolved { folderName: absoluteDir } map whenever
+  // folders change (create/rename/delete/path-set) or the mirror re-inits.
+  setFolderDirs(dirsByName) {
+    this._folderDirs = dirsByName || {};
+  }
+
+  // A folder's directory: its custom path if registered, else <base>/<name>.
+  _resolveDir(folderName) {
+    const name = folderName || "Personal";
+    return this._folderDirs[name] || path.join(this._basePath, name);
+  }
+
+  // Every directory a note file could live in: base subdirectories plus any
+  // custom folder dirs (which may sit outside the base path). Used by the
+  // glob helpers so stale-cleanup / delete still find files after a note moves
+  // between folders or a folder points elsewhere.
+  _searchDirs() {
+    const dirs = new Set();
+    try {
+      for (const d of fs.readdirSync(this._basePath, { withFileTypes: true })) {
+        if (d.isDirectory()) dirs.add(path.join(this._basePath, d.name));
+      }
+    } catch {}
+    for (const dir of Object.values(this._folderDirs || {})) {
+      if (dir) dirs.add(dir);
+    }
+    return [...dirs];
   }
 
   setTemplatePath(templatePath) {
@@ -166,7 +199,7 @@ class MarkdownMirror {
     if (!this._basePath) return;
     try {
       const dirName = folderName || "Personal";
-      const dirPath = path.join(this._basePath, dirName);
+      const dirPath = this._resolveDir(dirName);
       fs.mkdirSync(dirPath, { recursive: true });
 
       // Remove stale files (title changed or note moved to different folder)
@@ -220,7 +253,7 @@ class MarkdownMirror {
       if (!segments.length) return;
 
       const dirName = folderName || "Personal";
-      const dirPath = path.join(this._basePath, dirName);
+      const dirPath = this._resolveDir(dirName);
       fs.mkdirSync(dirPath, { recursive: true });
 
       const slug = this._slugify(note.title);
@@ -262,7 +295,7 @@ class MarkdownMirror {
   ensureFolder(folderName) {
     if (!this._basePath) return;
     try {
-      fs.mkdirSync(path.join(this._basePath, folderName), { recursive: true });
+      fs.mkdirSync(this._resolveDir(folderName), { recursive: true });
     } catch (err) {
       debugLogger.error(
         "Failed to ensure folder",
@@ -330,41 +363,36 @@ class MarkdownMirror {
 
   getFolderPath(folderName) {
     if (!this._basePath) return null;
-    const dirPath = path.join(this._basePath, folderName);
+    const dirPath = this._resolveDir(folderName);
     return fs.existsSync(dirPath) ? dirPath : null;
   }
 
   _globNoteFiles(noteId) {
     if (!this._basePath) return [];
     const results = [];
-    try {
-      const prefix = `${noteId}-`;
-      const dirs = fs.readdirSync(this._basePath, { withFileTypes: true });
-      for (const dir of dirs) {
-        if (!dir.isDirectory()) continue;
-        const dirPath = path.join(this._basePath, dir.name);
-        const files = fs.readdirSync(dirPath);
-        for (const file of files) {
+    const prefix = `${noteId}-`;
+    for (const dirPath of this._searchDirs()) {
+      try {
+        for (const file of fs.readdirSync(dirPath)) {
+          // Matches `-transcript.md` too, by design: writeNote's stale-cleanup
+          // relies on this to remove an orphaned sidecar when switching to
+          // template mode (which inlines the transcript and skips writeTranscript).
           if (file.startsWith(prefix) && file.endsWith(".md")) {
             results.push(path.join(dirPath, file));
           }
         }
-      }
-    } catch {}
+      } catch {}
+    }
     return results;
   }
 
   _globTranscriptFiles(noteId) {
     if (!this._basePath) return [];
     const results = [];
-    try {
-      const prefix = `${noteId}-`;
-      const dirs = fs.readdirSync(this._basePath, { withFileTypes: true });
-      for (const dir of dirs) {
-        if (!dir.isDirectory()) continue;
-        const dirPath = path.join(this._basePath, dir.name);
-        const files = fs.readdirSync(dirPath);
-        for (const file of files) {
+    const prefix = `${noteId}-`;
+    for (const dirPath of this._searchDirs()) {
+      try {
+        for (const file of fs.readdirSync(dirPath)) {
           if (
             file.startsWith(prefix) &&
             (file.endsWith("-transcript.md") || file.endsWith("-transcript.txt"))
@@ -372,8 +400,8 @@ class MarkdownMirror {
             results.push(path.join(dirPath, file));
           }
         }
-      }
-    } catch {}
+      } catch {}
+    }
     return results;
   }
 }

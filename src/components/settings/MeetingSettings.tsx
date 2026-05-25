@@ -1,12 +1,14 @@
 import { useCallback, useEffect, useState } from "react";
 import { useTranslation } from "react-i18next";
-import { Cloud, Key, Cpu, Network, FolderOpen, Check, X } from "lucide-react";
+import { Cloud, Key, Cpu, Network, FolderOpen, Check, X, RotateCcw } from "lucide-react";
 import { useSettingsStore } from "../../stores/settingsStore";
-import { InferenceModeSelector, SettingsRow } from "../ui/SettingsSection";
+import { InferenceModeSelector, SettingsRow, SettingsPanel } from "../ui/SettingsSection";
 import type { InferenceModeOption } from "../ui/SettingsSection";
 import { Toggle } from "../ui/toggle";
 import { Input } from "../ui/input";
 import { Button } from "../ui/button";
+import { ThreeOptionDialog } from "../ui/dialog";
+import { useToast } from "../ui/useToast";
 import TranscriptionModelPicker from "../TranscriptionModelPicker";
 import SelfHostedPanel from "../SelfHostedPanel";
 import type { InferenceMode, FolderItem } from "../../types/electron";
@@ -176,6 +178,201 @@ export function MeetingDefaultFolderRow() {
         ))}
       </select>
     </SettingsRow>
+  );
+}
+
+// Per-folder on-disk locations for the markdown mirror. Each folder can point
+// at its own directory; blank = the default (<notes base>/<folder name>).
+export function FolderLocationsPanel() {
+  const { t } = useTranslation();
+  const { toast } = useToast();
+  const noteFilesEnabled = useSettingsStore((s) => s.noteFilesEnabled);
+  const [folders, setFolders] = useState<FolderItem[]>([]);
+  const [counts, setCounts] = useState<Record<number, number>>({});
+  const [localPaths, setLocalPaths] = useState<Record<number, string>>({});
+  const [pending, setPending] = useState<{
+    id: number;
+    name: string;
+    path: string | null;
+    count: number;
+  } | null>(null);
+
+  const load = useCallback(async () => {
+    const [items, noteCounts] = await Promise.all([
+      window.electronAPI?.getFolders?.() ?? Promise.resolve([]),
+      window.electronAPI?.getFolderNoteCounts?.() ?? Promise.resolve([]),
+    ]);
+    const list = items ?? [];
+    setFolders(list);
+    setLocalPaths(Object.fromEntries(list.map((f) => [f.id, f.path || ""])));
+    const cm: Record<number, number> = {};
+    (noteCounts ?? []).forEach((c) => {
+      cm[c.folder_id] = c.count;
+    });
+    setCounts(cm);
+  }, []);
+
+  useEffect(() => {
+    load();
+    const unsubscribe = window.electronAPI?.onFolderPathChanged?.(() => load());
+    return () => unsubscribe?.();
+  }, [load]);
+
+  const save = useCallback(
+    async (id: number, folderPath: string | null, moveExisting: boolean) => {
+      const res = await window.electronAPI?.setFolderPath?.(id, folderPath, moveExisting);
+      if (res?.success) {
+        if (moveExisting && res.moved) {
+          toast({
+            title: t("settings.folders.moved", { count: res.moved, defaultValue: "Moved {{count}} note(s)" }),
+            variant: "success",
+          });
+        }
+        await load();
+      } else {
+        toast({
+          title: t("settings.folders.saveFailed", "Couldn't update folder location"),
+          description: res?.error,
+          variant: "destructive",
+        });
+      }
+    },
+    [load, toast, t]
+  );
+
+  // Commit a path edit: prompt about existing files when the folder has notes,
+  // otherwise save straight away.
+  const commit = useCallback(
+    (folder: FolderItem, rawPath: string) => {
+      const normalized = rawPath.trim() ? rawPath.trim() : null;
+      if ((folder.path || null) === normalized) return; // unchanged
+      const count = counts[folder.id] || 0;
+      if (count > 0) {
+        setPending({ id: folder.id, name: folder.name, path: normalized, count });
+      } else {
+        save(folder.id, normalized, false);
+      }
+    },
+    [counts, save]
+  );
+
+  const handleBrowse = useCallback(
+    async (folder: FolderItem) => {
+      const result = await window.electronAPI?.showOpenDialog?.({
+        properties: ["openDirectory"],
+        title: t("settings.folders.browseTitle", "Choose a folder location"),
+      });
+      const picked = result?.filePaths?.[0];
+      if (picked) {
+        setLocalPaths((p) => ({ ...p, [folder.id]: picked }));
+        commit(folder, picked);
+      }
+    },
+    [commit, t]
+  );
+
+  const revertLocal = useCallback(
+    (id: number) => {
+      setLocalPaths((p) => ({ ...p, [id]: folders.find((f) => f.id === id)?.path || "" }));
+    },
+    [folders]
+  );
+
+  return (
+    <div className="space-y-2">
+      <SettingsRow
+        label={t("settings.folders.title", "Folder locations")}
+        description={t(
+          "settings.folders.description",
+          "Choose where each folder's notes are saved on disk. Blank uses the default notes location. Applies when “Save notes as files” is on."
+        )}
+      >
+        {!noteFilesEnabled && (
+          <span className="text-xs text-muted-foreground/70">
+            {t("settings.folders.mirrorOff", "Enable “Save notes as files” to use these.")}
+          </span>
+        )}
+      </SettingsRow>
+
+      <SettingsPanel className="divide-y-0">
+        {folders.map((folder) => {
+          const value = localPaths[folder.id] ?? "";
+          return (
+            <div key={folder.id} className="px-3 py-2.5">
+              <div className="flex items-center gap-2">
+                <span className="text-xs font-medium text-foreground min-w-0 flex-1 truncate">
+                  {folder.name}
+                </span>
+                <div className="flex items-center gap-1.5 w-full max-w-sm">
+                  <Input
+                    value={value}
+                    onChange={(e) => setLocalPaths((p) => ({ ...p, [folder.id]: e.target.value }))}
+                    onBlur={() => commit(folder, value)}
+                    onKeyDown={(e) => {
+                      if (e.key === "Enter") commit(folder, value);
+                    }}
+                    placeholder={t("settings.folders.placeholder", "Default location")}
+                    className="h-8 text-xs"
+                  />
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={() => handleBrowse(folder)}
+                    className="h-8 px-2 shrink-0"
+                    title={t("settings.folders.browse", "Browse")}
+                  >
+                    <FolderOpen size={14} />
+                  </Button>
+                  {folder.path && (
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      onClick={() => {
+                        setLocalPaths((p) => ({ ...p, [folder.id]: "" }));
+                        commit(folder, "");
+                      }}
+                      className="h-8 px-2 shrink-0"
+                      title={t("settings.folders.reset", "Reset to default")}
+                    >
+                      <RotateCcw size={14} />
+                    </Button>
+                  )}
+                </div>
+              </div>
+            </div>
+          );
+        })}
+      </SettingsPanel>
+
+      <ThreeOptionDialog
+        open={pending !== null}
+        onOpenChange={(open) => {
+          if (!open) setPending(null);
+        }}
+        title={t("settings.folders.moveTitle", "Move existing notes?")}
+        description={
+          pending
+            ? t("settings.folders.moveDescription", {
+                name: pending.name,
+                count: pending.count,
+                defaultValue:
+                  '“{{name}}” already has {{count}} note(s) on disk. Move them to the new location, or leave them where they are?',
+              })
+            : ""
+        }
+        primaryText={t("settings.folders.move", "Move them")}
+        secondaryText={t("settings.folders.leave", "Leave them")}
+        onPrimary={() => {
+          if (pending) save(pending.id, pending.path, true);
+        }}
+        onSecondary={() => {
+          if (pending) save(pending.id, pending.path, false);
+        }}
+        onCancel={() => {
+          if (pending) revertLocal(pending.id);
+        }}
+      />
+    </div>
   );
 }
 

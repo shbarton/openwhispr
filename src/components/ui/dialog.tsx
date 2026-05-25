@@ -151,6 +151,75 @@ const ConfirmDialog: React.FC<ConfirmDialogProps> = ({
   );
 };
 
+// Three-action dialog (e.g. Move / Leave / Cancel). Primary + secondary are
+// two distinct affirmative choices; cancel dismisses without acting.
+interface ThreeOptionDialogProps {
+  open: boolean;
+  onOpenChange: (open: boolean) => void;
+  title: string;
+  description?: string;
+  primaryText: string;
+  secondaryText: string;
+  cancelText?: string;
+  onPrimary: () => void;
+  onSecondary: () => void;
+  onCancel?: () => void;
+}
+
+const ThreeOptionDialog: React.FC<ThreeOptionDialogProps> = ({
+  open,
+  onOpenChange,
+  title,
+  description,
+  primaryText,
+  secondaryText,
+  cancelText = "Cancel",
+  onPrimary,
+  onSecondary,
+  onCancel,
+}) => {
+  const close = () => onOpenChange(false);
+  return (
+    <Dialog open={open} onOpenChange={onOpenChange}>
+      <DialogContent className="sm:max-w-[460px]">
+        <DialogHeader>
+          <DialogTitle>{title}</DialogTitle>
+          {description && <DialogDescription>{description}</DialogDescription>}
+        </DialogHeader>
+        <DialogFooter>
+          <Button
+            variant="ghost"
+            onClick={() => {
+              onCancel?.();
+              close();
+            }}
+          >
+            {cancelText}
+          </Button>
+          <Button
+            variant="outline"
+            onClick={() => {
+              onSecondary();
+              close();
+            }}
+          >
+            {secondaryText}
+          </Button>
+          <Button
+            variant="default"
+            onClick={() => {
+              onPrimary();
+              close();
+            }}
+          >
+            {primaryText}
+          </Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
+  );
+};
+
 // Custom alert dialog component
 interface AlertDialogProps {
   open: boolean;
@@ -203,5 +272,6 @@ export {
   DialogTitle,
   DialogDescription,
   ConfirmDialog,
+  ThreeOptionDialog,
   AlertDialog,
 };

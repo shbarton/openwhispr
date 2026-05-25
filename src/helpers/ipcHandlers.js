@@ -398,6 +398,7 @@ class IPCHandlers {
     }
     setImmediate(() => {
       const markdownMirror = require("./markdownMirror");
+      this._refreshMirrorFolderDirs();
       const folderName = this._getFolderName(note.folder_id);
       const speakerMappings = note.transcript ? this._buildSpeakerMappings(note.id) : {};
       markdownMirror.writeNote(note, folderName, speakerMappings);
@@ -414,6 +415,7 @@ class IPCHandlers {
     }
     setImmediate(() => {
       const markdownMirror = require("./markdownMirror");
+      this._refreshMirrorFolderDirs();
       markdownMirror.deleteNote(noteId);
     });
   }
@@ -425,6 +427,70 @@ class IPCHandlers {
       map[f.id] = f.name;
     }
     return map;
+  }
+
+  // A folder's on-disk directory for the mirror: its custom path if set, else
+  // <base>/<name>. (folder.path is nullable per-folder; see database.setFolderPath.)
+  _resolveFolderDir(folder) {
+    const markdownMirror = require("./markdownMirror");
+    const basePath = markdownMirror.getBasePath() || "";
+    const custom = folder?.path && folder.path.trim();
+    return custom ? folder.path.trim() : path.join(basePath, folder?.name || "Personal");
+  }
+
+  // Push the current { folderName: absoluteDir } map into the mirror so it
+  // writes to and globs across custom folder paths. Cheap (folders are few);
+  // called before every mirror write/delete and after any folder change.
+  _refreshMirrorFolderDirs() {
+    const markdownMirror = require("./markdownMirror");
+    if (!markdownMirror.getBasePath()) return;
+    const dirs = {};
+    for (const f of this.databaseManager.getFolders()) {
+      dirs[f.name] = this._resolveFolderDir(f);
+    }
+    markdownMirror.setFolderDirs(dirs);
+  }
+
+  // Relocate a folder's mirrored `<id>-*.md` files from one dir to another.
+  // Only touches files whose id matches a note in this folder — never rm's a
+  // directory (the target may be a user-owned vault location). Returns count.
+  _moveFolderMirrorFiles(folderId, fromDir, toDir) {
+    let moved = 0;
+    try {
+      fs.mkdirSync(toDir, { recursive: true });
+      const ids = new Set(
+        this.databaseManager.db
+          .prepare("SELECT id FROM notes WHERE folder_id = ?")
+          .all(folderId)
+          .map((r) => String(r.id))
+      );
+      let entries = [];
+      try {
+        entries = fs.readdirSync(fromDir);
+      } catch {
+        return 0;
+      }
+      for (const file of entries) {
+        const m = file.match(/^(\d+)-.*\.md$/);
+        if (!m || !ids.has(m[1])) continue;
+        const src = path.join(fromDir, file);
+        const dst = path.join(toDir, file);
+        try {
+          fs.renameSync(src, dst);
+        } catch {
+          fs.copyFileSync(src, dst);
+          fs.unlinkSync(src);
+        }
+        moved++;
+      }
+    } catch (err) {
+      debugLogger.error(
+        "Failed to move folder mirror files",
+        { folderId, error: err.message },
+        "note-files"
+      );
+    }
+    return moved;
   }
 
   _buildSpeakerMappings(noteId) {
@@ -475,6 +541,7 @@ class IPCHandlers {
   _rebuildMirror(basePath) {
     const markdownMirror = require("./markdownMirror");
     if (basePath) markdownMirror.init(basePath);
+    this._refreshMirrorFolderDirs();
     const notes = this.databaseManager.getNotes(null, 99999);
     const speakerMappingsMap = {};
     for (const note of notes) {
@@ -1030,6 +1097,7 @@ class IPCHandlers {
           this.broadcastToWindows("folder-created", result.folder);
           if (this._noteFilesEnabled) {
             const markdownMirror = require("./markdownMirror");
+            this._refreshMirrorFolderDirs();
             markdownMirror.ensureFolder(result.folder.name);
           }
         });
@@ -1038,7 +1106,9 @@ class IPCHandlers {
     });
 
     ipcMain.handle("db-delete-folder", async (event, id) => {
-      const folderName = this._noteFilesEnabled ? this._getFolderName(id) : null;
+      const folder = this._noteFilesEnabled
+        ? this.databaseManager.getFolders().find((f) => f.id === id)
+        : null;
       const result = this.databaseManager.deleteFolder(id);
       if (result?.success) {
         for (const noteId of result.noteIds ?? []) {
@@ -1046,9 +1116,26 @@ class IPCHandlers {
         }
         setImmediate(() => {
           this.broadcastToWindows("folder-deleted", { id });
-          if (this._noteFilesEnabled && folderName) {
+          if (this._noteFilesEnabled && folder) {
             const markdownMirror = require("./markdownMirror");
-            markdownMirror.deleteFolder(folderName);
+            const hasCustomPath = !!(folder.path && folder.path.trim());
+            if (hasCustomPath) {
+              // Never rm a user-owned directory; remove only this folder's
+              // mirrored note files. Keep the deleted folder's dir registered
+              // so the per-note globs can still locate them.
+              const dirs = {};
+              for (const f of this.databaseManager.getFolders()) {
+                dirs[f.name] = this._resolveFolderDir(f);
+              }
+              dirs[folder.name] = this._resolveFolderDir(folder);
+              markdownMirror.setFolderDirs(dirs);
+              for (const noteId of result.noteIds ?? []) {
+                markdownMirror.deleteNote(noteId);
+              }
+            } else {
+              markdownMirror.deleteFolder(folder.name);
+            }
+            this._refreshMirrorFolderDirs();
           }
         });
       }
@@ -1063,7 +1150,11 @@ class IPCHandlers {
           this.broadcastToWindows("folder-renamed", result.folder);
           if (this._noteFilesEnabled && oldName) {
             const markdownMirror = require("./markdownMirror");
+            // For a custom-path folder, base/<oldName> won't exist so this is a
+            // safe no-op (the custom dir keeps its files); the registry refresh
+            // re-maps the new name to that same dir.
             markdownMirror.renameFolder(oldName, name);
+            this._refreshMirrorFolderDirs();
           }
         });
       }
@@ -1088,6 +1179,30 @@ class IPCHandlers {
         });
       }
       return result;
+    });
+
+    // Set/clear a folder's custom on-disk path. moveExisting=true relocates the
+    // folder's already-mirrored files from the old dir to the new one; false
+    // leaves them and only future writes use the new path. Returns { moved }.
+    ipcMain.handle("db-set-folder-path", async (event, id, newPath, moveExisting = false) => {
+      const before = this.databaseManager.getFolders().find((f) => f.id === id);
+      const oldDir = before ? this._resolveFolderDir(before) : null;
+      const result = this.databaseManager.setFolderPath(id, newPath ?? null);
+      let moved = 0;
+      if (result?.success) {
+        const newDir = this._resolveFolderDir(result.folder);
+        this._refreshMirrorFolderDirs();
+        if (moveExisting && this._noteFilesEnabled && oldDir && newDir && oldDir !== newDir) {
+          moved = this._moveFolderMirrorFiles(id, oldDir, newDir);
+        }
+        setImmediate(() => {
+          this.broadcastToWindows("folder-path-changed", {
+            folderId: id,
+            path: result.folder?.path ?? null,
+          });
+        });
+      }
+      return { ...result, moved };
     });
 
     ipcMain.handle("db-get-actions", async () => {

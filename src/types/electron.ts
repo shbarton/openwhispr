@@ -132,6 +132,8 @@ export interface FolderItem {
   is_default: number;
   /** 1 if auto-detected meetings route to this folder. Device-local (not synced). */
   is_meeting_default?: number;
+  /** Custom on-disk dir for the markdown mirror; null = <base>/<name>. Device-local. */
+  path?: string | null;
   sort_order: number;
   created_at: string;
   updated_at: string;
@@ -595,6 +597,12 @@ declare global {
       setDefaultMeetingFolder: (
         folderId: number | null
       ) => Promise<{ success: boolean; folderId?: number | null; error?: string }>;
+      /** Set/clear a folder's custom on-disk path; moveExisting relocates already-mirrored files. */
+      setFolderPath: (
+        id: number,
+        path: string | null,
+        moveExisting?: boolean
+      ) => Promise<{ success: boolean; folder?: FolderItem; moved?: number; error?: string }>;
 
       // Note files (markdown mirror)
       noteFilesSetEnabled?: (
@@ -661,6 +669,9 @@ declare global {
       onNoteAdded?: (callback: (note: NoteItem) => void) => () => void;
       onMeetingDefaultFolderChanged?: (
         callback: (payload: { folderId: number | null }) => void
+      ) => () => void;
+      onFolderPathChanged?: (
+        callback: (payload: { folderId: number; path: string | null }) => void
       ) => () => void;
       onNoteUpdated?: (callback: (note: NoteItem) => void) => () => void;
       onNoteDeleted?: (callback: (payload: { id: number }) => void) => () => void;

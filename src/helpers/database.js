@@ -508,6 +508,13 @@ class DatabaseManager {
       } catch (err) {
         if (!err.message.includes("duplicate column")) throw err;
       }
+      // Optional per-folder on-disk path for the markdown mirror. NULL = fall
+      // back to <noteFilesPath>/<folderName>. Device-local; not cloud-synced.
+      try {
+        this.db.exec("ALTER TABLE folders ADD COLUMN path TEXT");
+      } catch (err) {
+        if (!err.message.includes("duplicate column")) throw err;
+      }
       // At most one meeting-default folder at a time (excluding tombstones).
       this.db.exec(`
         CREATE UNIQUE INDEX IF NOT EXISTS idx_one_meeting_default
@@ -1728,6 +1735,29 @@ class DatabaseManager {
       return { success: true, folderId: folderId ?? null };
     } catch (error) {
       debugLogger.error("Error setting meeting default folder", { error: error.message }, "notes");
+      throw error;
+    }
+  }
+
+  // Set (or clear) a folder's custom on-disk path for the markdown mirror.
+  // Pass null/empty to clear back to the <base>/<name> default. Device-local.
+  setFolderPath(id, folderPath) {
+    try {
+      if (!this.db) throw new Error("Database not initialized");
+      const folder = this.db
+        .prepare("SELECT id FROM folders WHERE id = ? AND deleted_at IS NULL")
+        .get(id);
+      if (!folder) return { success: false, error: "Folder not found" };
+      const normalized = folderPath && folderPath.trim() ? folderPath.trim() : null;
+      this.db
+        .prepare(
+          "UPDATE folders SET path = ?, sync_status = 'pending', updated_at = datetime('now') WHERE id = ?"
+        )
+        .run(normalized, id);
+      const updated = this.db.prepare("SELECT * FROM folders WHERE id = ?").get(id);
+      return { success: true, folder: updated };
+    } catch (error) {
+      debugLogger.error("Error setting folder path", { error: error.message }, "notes");
       throw error;
     }
   }

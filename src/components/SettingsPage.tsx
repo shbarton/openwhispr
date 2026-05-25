@@ -80,6 +80,7 @@ import {
   MeetingTranscriptionPanel,
   MeetingDefaultFolderRow,
   VaultPathRow,
+  FolderLocationsPanel,
 } from "./settings/MeetingSettings";
 import LanguageSelector from "./ui/LanguageSelector";
 import { Skeleton } from "./ui/skeleton";
@@ -3062,6 +3063,7 @@ EOF`,
               <MeetingDefaultFolderRow />
               <VaultPathRow />
             </div>
+            <FolderLocationsPanel />
           </div>
         );
 
