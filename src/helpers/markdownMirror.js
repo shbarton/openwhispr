@@ -322,6 +322,18 @@ class MarkdownMirror {
     }
   }
 
+  // Remove a folder's directory only if it is now empty (after its note files
+  // were deleted individually). Never recursive — safe for a dir another folder
+  // shares or a user vault location that holds other content.
+  removeFolderDirIfEmpty(folderName) {
+    if (!this._basePath) return;
+    try {
+      fs.rmdirSync(this._resolveDir(folderName));
+    } catch {
+      // ENOTEMPTY / ENOENT — leave the directory in place.
+    }
+  }
+
   deleteFolder(folderName) {
     if (!this._basePath) return;
     try {

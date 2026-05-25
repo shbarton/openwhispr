@@ -454,17 +454,25 @@ class IPCHandlers {
     markdownMirror.setFolderDirs(dirs);
   }
 
-  // Relocate a folder's mirrored `<id>-*.md` files from one dir to another.
-  // Only touches files whose id matches a note in this folder — never rm's a
-  // directory (the target may be a user-owned vault location). Returns count.
-  _moveFolderMirrorFiles(folderId, fromDir, toDir) {
+  // Relocate a folder's mirrored `<id>-*` files (note + transcript sidecars,
+  // any extension) from one dir to another. Only touches files whose id matches
+  // a note in this folder — never rm's a directory (the target may be a
+  // user-owned vault location). Returns count.
+  _moveFolderMirrorFiles(folder, fromDir, toDir) {
     let moved = 0;
     try {
       fs.mkdirSync(toDir, { recursive: true });
+      // Notes with folder_id NULL resolve to the "Personal" folder (see
+      // _getFolderName), so include them when moving Personal — otherwise their
+      // files are stranded in the old dir.
+      const sql =
+        folder.name === "Personal"
+          ? "SELECT id FROM notes WHERE folder_id = ? OR folder_id IS NULL"
+          : "SELECT id FROM notes WHERE folder_id = ?";
       const ids = new Set(
         this.databaseManager.db
-          .prepare("SELECT id FROM notes WHERE folder_id = ?")
-          .all(folderId)
+          .prepare(sql)
+          .all(folder.id)
           .map((r) => String(r.id))
       );
       let entries = [];
@@ -474,7 +482,8 @@ class IPCHandlers {
         return 0;
       }
       for (const file of entries) {
-        const m = file.match(/^(\d+)-.*\.md$/);
+        // Any `<id>-*` artifact: note `.md`, sidecar `-transcript.md`/`.txt`.
+        const m = file.match(/^(\d+)-/);
         if (!m || !ids.has(m[1])) continue;
         const src = path.join(fromDir, file);
         const dst = path.join(toDir, file);
@@ -1122,17 +1131,16 @@ class IPCHandlers {
           if (this._noteFilesEnabled && folder) {
             const markdownMirror = require("./markdownMirror");
             const hasCustomPath = !!(folder.path && folder.path.trim());
-            if (hasCustomPath) {
-              // Never rm a user-owned directory; remove only this folder's
-              // mirrored note files. Keep the deleted folder's dir registered
-              // so the per-note globs can still locate them.
-              this._refreshMirrorFolderDirs(folder);
-              for (const noteId of result.noteIds ?? []) {
-                markdownMirror.deleteNote(noteId);
-              }
-            } else {
-              markdownMirror.deleteFolder(folder.name);
+            // Remove only this folder's own note files (precise, by note id) so
+            // a custom path that overlaps another folder's directory can't wipe
+            // its files. Keep the deleted folder's dir registered for the globs.
+            this._refreshMirrorFolderDirs(folder);
+            for (const noteId of result.noteIds ?? []) {
+              markdownMirror.deleteNote(noteId);
             }
+            // Tidy the now-empty default dir we own; no-op for custom paths or
+            // dirs another folder shares (rmdir won't remove a non-empty dir).
+            if (!hasCustomPath) markdownMirror.removeFolderDirIfEmpty(folder.name);
             this._refreshMirrorFolderDirs();
           }
         });
@@ -1191,7 +1199,7 @@ class IPCHandlers {
         const newDir = this._resolveFolderDir(result.folder);
         this._refreshMirrorFolderDirs();
         if (moveExisting && this._noteFilesEnabled && oldDir && newDir && oldDir !== newDir) {
-          moved = this._moveFolderMirrorFiles(id, oldDir, newDir);
+          moved = this._moveFolderMirrorFiles(result.folder, oldDir, newDir);
         }
         setImmediate(() => {
           this.broadcastToWindows("folder-path-changed", {
