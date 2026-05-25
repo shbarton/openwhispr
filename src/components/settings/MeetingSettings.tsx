@@ -12,6 +12,7 @@ import {
   Plus,
   Trash2,
   MoreHorizontal,
+  ExternalLink,
 } from "lucide-react";
 import { useSettingsStore } from "../../stores/settingsStore";
 import { InferenceModeSelector, SettingsRow, SettingsPanel } from "../ui/SettingsSection";
@@ -346,6 +347,22 @@ export function FolderLocationsPanel() {
     [load, toast, t]
   );
 
+  const handleReveal = useCallback(
+    async (folder: FolderItem) => {
+      const res = await window.electronAPI?.showFolderInExplorer?.(folder.name);
+      if (!res?.success) {
+        toast({
+          title: t("settings.folders.notOnDisk", "Folder isn't on disk yet"),
+          description: t(
+            "settings.folders.notOnDiskHint",
+            "It appears once a note is saved there (with “Save notes as files” on)."
+          ),
+        });
+      }
+    },
+    [toast, t]
+  );
+
   const handleDelete = useCallback(
     async (id: number, deleteFiles: boolean) => {
       const res = await window.electronAPI?.deleteFolder?.(id, deleteFiles);
@@ -424,52 +441,57 @@ export function FolderLocationsPanel() {
                   >
                     <FolderOpen size={14} />
                   </Button>
-                  {(folder.path || !folder.is_default) && (
-                    <DropdownMenu>
-                      <DropdownMenuTrigger asChild>
-                        <Button
-                          variant="ghost"
-                          size="sm"
-                          className="h-8 px-2 shrink-0 text-muted-foreground/60 hover:text-foreground data-[state=open]:text-foreground"
-                          title={t("settings.folders.more", "More")}
+                  <DropdownMenu>
+                    <DropdownMenuTrigger asChild>
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        className="h-8 px-2 shrink-0 text-muted-foreground/60 hover:text-foreground data-[state=open]:text-foreground"
+                        title={t("settings.folders.more", "More")}
+                      >
+                        <MoreHorizontal size={14} />
+                      </Button>
+                    </DropdownMenuTrigger>
+                    <DropdownMenuContent align="end" sideOffset={4} className="min-w-40">
+                      <DropdownMenuItem
+                        onClick={() => handleReveal(folder)}
+                        className="text-xs gap-2 rounded-md px-2 py-1"
+                      >
+                        <ExternalLink size={12} className="text-muted-foreground/60" />
+                        {t("settings.folders.reveal", "Reveal in Finder")}
+                      </DropdownMenuItem>
+                      {folder.path && (
+                        <DropdownMenuItem
+                          onClick={() => {
+                            setLocalPaths((p) => ({ ...p, [folder.id]: "" }));
+                            commit(folder, "");
+                          }}
+                          className="text-xs gap-2 rounded-md px-2 py-1"
                         >
-                          <MoreHorizontal size={14} />
-                        </Button>
-                      </DropdownMenuTrigger>
-                      <DropdownMenuContent align="end" sideOffset={4} className="min-w-40">
-                        {folder.path && (
+                          <RotateCcw size={12} className="text-muted-foreground/60" />
+                          {t("settings.folders.reset", "Reset to default")}
+                        </DropdownMenuItem>
+                      )}
+                      {!folder.is_default && (
+                        <>
+                          <DropdownMenuSeparator />
                           <DropdownMenuItem
-                            onClick={() => {
-                              setLocalPaths((p) => ({ ...p, [folder.id]: "" }));
-                              commit(folder, "");
-                            }}
-                            className="text-xs gap-2 rounded-md px-2 py-1"
+                            onClick={() =>
+                              setConfirmDelete({
+                                id: folder.id,
+                                name: folder.name,
+                                count: counts[folder.id] || 0,
+                              })
+                            }
+                            className="text-xs gap-2 rounded-md px-2 py-1 text-destructive focus:text-destructive"
                           >
-                            <RotateCcw size={12} className="text-muted-foreground/60" />
-                            {t("settings.folders.reset", "Reset to default")}
+                            <Trash2 size={12} />
+                            {t("settings.folders.delete", "Delete folder")}
                           </DropdownMenuItem>
-                        )}
-                        {!folder.is_default && (
-                          <>
-                            {folder.path && <DropdownMenuSeparator />}
-                            <DropdownMenuItem
-                              onClick={() =>
-                                setConfirmDelete({
-                                  id: folder.id,
-                                  name: folder.name,
-                                  count: counts[folder.id] || 0,
-                                })
-                              }
-                              className="text-xs gap-2 rounded-md px-2 py-1 text-destructive focus:text-destructive"
-                            >
-                              <Trash2 size={12} />
-                              {t("settings.folders.delete", "Delete folder")}
-                            </DropdownMenuItem>
-                          </>
-                        )}
-                      </DropdownMenuContent>
-                    </DropdownMenu>
-                  )}
+                        </>
+                      )}
+                    </DropdownMenuContent>
+                  </DropdownMenu>
                 </div>
               </div>
             </div>
