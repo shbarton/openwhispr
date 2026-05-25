@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useState } from "react";
 import { useTranslation } from "react-i18next";
-import { Cloud, Key, Cpu, Network, FolderOpen, Check, X, RotateCcw } from "lucide-react";
+import { Cloud, Key, Cpu, Network, FolderOpen, Check, X, RotateCcw, Plus } from "lucide-react";
 import { useSettingsStore } from "../../stores/settingsStore";
 import { InferenceModeSelector, SettingsRow, SettingsPanel } from "../ui/SettingsSection";
 import type { InferenceModeOption } from "../ui/SettingsSection";
@@ -196,6 +196,7 @@ export function FolderLocationsPanel() {
     path: string | null;
     count: number;
   } | null>(null);
+  const [newFolderName, setNewFolderName] = useState("");
 
   const load = useCallback(async () => {
     const [items, noteCounts] = await Promise.all([
@@ -278,6 +279,23 @@ export function FolderLocationsPanel() {
     [folders]
   );
 
+  // Create a folder directly from here (same pipeline as the Notes view). The
+  // new folder appears in the list below, where its path can then be set.
+  const handleCreateFolder = useCallback(async () => {
+    const name = newFolderName.trim();
+    if (!name) return;
+    const res = await window.electronAPI?.createFolder?.(name);
+    if (res?.success) {
+      setNewFolderName("");
+      await load();
+    } else {
+      toast({
+        title: res?.error ?? t("settings.folders.createFailed", "Couldn't create folder"),
+        variant: "destructive",
+      });
+    }
+  }, [newFolderName, load, toast, t]);
+
   return (
     <div className="space-y-2">
       <SettingsRow
@@ -342,6 +360,35 @@ export function FolderLocationsPanel() {
             </div>
           );
         })}
+
+        <div className="px-3 py-2.5 border-t border-border/30 dark:border-border-subtle/50">
+          <div className="flex items-center gap-2">
+            <span className="text-xs font-medium text-muted-foreground min-w-0 flex-1 truncate">
+              {t("settings.folders.addLabel", "New folder")}
+            </span>
+            <div className="flex items-center gap-1.5 w-full max-w-sm">
+              <Input
+                value={newFolderName}
+                onChange={(e) => setNewFolderName(e.target.value)}
+                onKeyDown={(e) => {
+                  if (e.key === "Enter") handleCreateFolder();
+                }}
+                placeholder={t("settings.folders.addPlaceholder", "New folder name")}
+                className="h-8 text-xs"
+              />
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={handleCreateFolder}
+                disabled={!newFolderName.trim()}
+                className="h-8 px-2 shrink-0"
+                title={t("settings.folders.add", "Add folder")}
+              >
+                <Plus size={14} />
+              </Button>
+            </div>
+          </div>
+        </div>
       </SettingsPanel>
 
       <ThreeOptionDialog
