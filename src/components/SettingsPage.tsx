@@ -76,7 +76,11 @@ import DeveloperSection from "./DeveloperSection";
 import ChatAgentSettings from "./settings/ChatAgentSettings";
 import DictationAgentSettings from "./settings/DictationAgentSettings";
 import InferenceConfigEditor from "./settings/InferenceConfigEditor";
-import { MeetingTranscriptionPanel } from "./settings/MeetingSettings";
+import {
+  MeetingTranscriptionPanel,
+  MeetingDefaultFolderRow,
+  VaultPathRow,
+} from "./settings/MeetingSettings";
 import LanguageSelector from "./ui/LanguageSelector";
 import { Skeleton } from "./ui/skeleton";
 import { Progress } from "./ui/progress";
@@ -105,6 +109,7 @@ export type SettingsSectionType =
   | "hotkeys"
   | "speechToText"
   | "llms"
+  | "meetingsNotes"
   | "privacyData"
   | "system";
 
@@ -3039,6 +3044,23 @@ EOF`,
                   />
                 </SettingsPanelRow>
               </SettingsPanel>
+            </div>
+          </div>
+        );
+
+      case "meetingsNotes":
+        return (
+          <div className="space-y-6">
+            <SectionHeader
+              title={t("settingsPage.meetingsNotes.title", "Meetings & Notes")}
+              description={t(
+                "settingsPage.meetingsNotes.description",
+                "Where meetings are filed and how notes are enriched."
+              )}
+            />
+            <div className="space-y-3">
+              <MeetingDefaultFolderRow />
+              <VaultPathRow />
             </div>
           </div>
         );

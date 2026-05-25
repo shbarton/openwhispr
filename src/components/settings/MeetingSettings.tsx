@@ -312,8 +312,6 @@ export function MeetingTranscriptionPanel() {
         </>
       )}
       <MeetingSpeakerDetectionRow />
-      <MeetingDefaultFolderRow />
-      <VaultPathRow />
     </div>
   );
 }

@@ -9,6 +9,7 @@ import {
   Keyboard,
   CreditCard,
   Shield,
+  BookOpen,
 } from "lucide-react";
 import SidebarModal, { type SidebarItem } from "./ui/SidebarModal";
 import SettingsPage, { SettingsSectionType } from "./SettingsPage";
@@ -78,6 +79,13 @@ export default function SettingsModal({ open, onOpenChange, initialSection }: Se
         label: t("settingsModal.sections.hotkeys.label"),
         icon: Keyboard,
         description: t("settingsModal.sections.hotkeys.description"),
+        group: t("settingsModal.groups.app"),
+      },
+      {
+        id: "meetingsNotes",
+        label: t("settingsModal.sections.meetingsNotes.label", "Meetings & Notes"),
+        icon: BookOpen,
+        description: t("settingsModal.sections.meetingsNotes.description", "Meeting folder & Calyx vault"),
         group: t("settingsModal.groups.app"),
       },
       {
