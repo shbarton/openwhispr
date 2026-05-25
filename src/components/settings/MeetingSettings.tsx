@@ -1,13 +1,24 @@
 import { useCallback, useEffect, useState } from "react";
 import { useTranslation } from "react-i18next";
-import { Cloud, Key, Cpu, Network, FolderOpen, Check, X, RotateCcw, Plus } from "lucide-react";
+import {
+  Cloud,
+  Key,
+  Cpu,
+  Network,
+  FolderOpen,
+  Check,
+  X,
+  RotateCcw,
+  Plus,
+  Trash2,
+} from "lucide-react";
 import { useSettingsStore } from "../../stores/settingsStore";
 import { InferenceModeSelector, SettingsRow, SettingsPanel } from "../ui/SettingsSection";
 import type { InferenceModeOption } from "../ui/SettingsSection";
 import { Toggle } from "../ui/toggle";
 import { Input } from "../ui/input";
 import { Button } from "../ui/button";
-import { ThreeOptionDialog } from "../ui/dialog";
+import { ThreeOptionDialog, ConfirmDialog } from "../ui/dialog";
 import { useToast } from "../ui/useToast";
 import TranscriptionModelPicker from "../TranscriptionModelPicker";
 import SelfHostedPanel from "../SelfHostedPanel";
@@ -197,6 +208,12 @@ export function FolderLocationsPanel() {
     count: number;
   } | null>(null);
   const [newFolderName, setNewFolderName] = useState("");
+  const [localNames, setLocalNames] = useState<Record<number, string>>({});
+  const [confirmDelete, setConfirmDelete] = useState<{
+    id: number;
+    name: string;
+    count: number;
+  } | null>(null);
 
   const load = useCallback(async () => {
     const [items, noteCounts] = await Promise.all([
@@ -206,6 +223,7 @@ export function FolderLocationsPanel() {
     const list = items ?? [];
     setFolders(list);
     setLocalPaths(Object.fromEntries(list.map((f) => [f.id, f.path || ""])));
+    setLocalNames(Object.fromEntries(list.map((f) => [f.id, f.name])));
     const cm: Record<number, number> = {};
     (noteCounts ?? []).forEach((c) => {
       cm[c.folder_id] = c.count;
@@ -296,6 +314,42 @@ export function FolderLocationsPanel() {
     }
   }, [newFolderName, load, toast, t]);
 
+  const handleRename = useCallback(
+    async (folder: FolderItem, rawName: string) => {
+      const name = rawName.trim();
+      if (!name || name === folder.name) {
+        setLocalNames((p) => ({ ...p, [folder.id]: folder.name })); // revert blanks
+        return;
+      }
+      const res = await window.electronAPI?.renameFolder?.(folder.id, name);
+      if (res?.success) {
+        await load();
+      } else {
+        setLocalNames((p) => ({ ...p, [folder.id]: folder.name }));
+        toast({
+          title: res?.error ?? t("settings.folders.renameFailed", "Couldn't rename folder"),
+          variant: "destructive",
+        });
+      }
+    },
+    [load, toast, t]
+  );
+
+  const handleDelete = useCallback(
+    async (id: number) => {
+      const res = await window.electronAPI?.deleteFolder?.(id);
+      if (res?.success) {
+        await load();
+      } else {
+        toast({
+          title: res?.error ?? t("settings.folders.deleteFailed", "Couldn't delete folder"),
+          variant: "destructive",
+        });
+      }
+    },
+    [load, toast, t]
+  );
+
   return (
     <div className="space-y-2">
       <SettingsRow
@@ -318,9 +372,26 @@ export function FolderLocationsPanel() {
           return (
             <div key={folder.id} className="px-3 py-2.5">
               <div className="flex items-center gap-2">
-                <span className="text-xs font-medium text-foreground min-w-0 flex-1 truncate">
-                  {folder.name}
-                </span>
+                {folder.is_default ? (
+                  <span className="text-xs font-medium text-foreground min-w-0 flex-1 truncate">
+                    {folder.name}
+                  </span>
+                ) : (
+                  <Input
+                    value={localNames[folder.id] ?? folder.name}
+                    onChange={(e) =>
+                      setLocalNames((p) => ({ ...p, [folder.id]: e.target.value }))
+                    }
+                    onBlur={() => handleRename(folder, localNames[folder.id] ?? "")}
+                    onKeyDown={(e) => {
+                      if (e.key === "Enter") (e.target as HTMLInputElement).blur();
+                      if (e.key === "Escape")
+                        setLocalNames((p) => ({ ...p, [folder.id]: folder.name }));
+                    }}
+                    aria-label={t("settings.folders.nameLabel", "Folder name")}
+                    className="h-8 text-xs font-medium min-w-0 flex-1"
+                  />
+                )}
                 <div className="flex items-center gap-1.5 w-full max-w-sm">
                   <Input
                     value={value}
@@ -353,6 +424,23 @@ export function FolderLocationsPanel() {
                       title={t("settings.folders.reset", "Reset to default")}
                     >
                       <RotateCcw size={14} />
+                    </Button>
+                  )}
+                  {!folder.is_default && (
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      onClick={() =>
+                        setConfirmDelete({
+                          id: folder.id,
+                          name: folder.name,
+                          count: counts[folder.id] || 0,
+                        })
+                      }
+                      className="h-8 px-2 shrink-0 text-muted-foreground hover:text-destructive"
+                      title={t("settings.folders.delete", "Delete folder")}
+                    >
+                      <Trash2 size={14} />
                     </Button>
                   )}
                 </div>
@@ -417,6 +505,34 @@ export function FolderLocationsPanel() {
         }}
         onCancel={() => {
           if (pending) revertLocal(pending.id);
+        }}
+      />
+
+      <ConfirmDialog
+        open={confirmDelete !== null}
+        onOpenChange={(open) => {
+          if (!open) setConfirmDelete(null);
+        }}
+        title={t("settings.folders.deleteTitle", "Delete folder?")}
+        description={
+          confirmDelete
+            ? confirmDelete.count > 0
+              ? t("settings.folders.deleteDescription", {
+                  name: confirmDelete.name,
+                  count: confirmDelete.count,
+                  defaultValue:
+                    'Delete “{{name}}” and its {{count}} note(s)? This can\'t be undone.',
+                })
+              : t("settings.folders.deleteDescriptionEmpty", {
+                  name: confirmDelete.name,
+                  defaultValue: 'Delete “{{name}}”?',
+                })
+            : ""
+        }
+        confirmText={t("settings.folders.deleteConfirm", "Delete")}
+        variant="destructive"
+        onConfirm={() => {
+          if (confirmDelete) handleDelete(confirmDelete.id);
         }}
       />
     </div>
