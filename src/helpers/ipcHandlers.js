@@ -4306,6 +4306,10 @@ class IPCHandlers {
         model: options.model,
         language: options.language,
         preconfigured: options.mode !== "byok",
+        // Meeting audio is captured at 24 kHz (meetingRecordingStore AudioContext);
+        // tell the provider the true rate or it transcribes pitch-shifted garbage.
+        // Deepgram/AssemblyAI default to 16 kHz when this is omitted; OpenAI ignores it.
+        sampleRate: MEETING_SAMPLE_RATE,
       };
       const { mode: systemAudioMode } = await getMeetingSystemAudioPlan();
       let pairs;
@@ -4348,6 +4352,7 @@ class IPCHandlers {
       return win;
     };
 
+    const MEETING_SAMPLE_RATE = 24000;
     const MEETING_MIC_REFERENCE_ALIGNMENT_MS = 320;
     const MEETING_STARTUP_WARMUP_MS = 1500;
     const MEETING_MIC_BLEED_RMS_CEILING = 0.018;
@@ -4523,7 +4528,7 @@ class IPCHandlers {
         // bytes / (2 * 24000). audioSecondsSent should track wallSecondsElapsed;
         // a growing feedLagSeconds means audio reaches Deepgram slower than
         // real-time (and the backlog drains for minutes after the call ends).
-        const audioSecondsSent = streaming.audioBytesSent / (2 * 24000);
+        const audioSecondsSent = streaming.audioBytesSent / (2 * MEETING_SAMPLE_RATE);
         const wallSecondsElapsed = meetingStartedAt
           ? (Date.now() - meetingStartedAt) / 1000
           : null;
@@ -7210,7 +7215,9 @@ class IPCHandlers {
           }
         }
 
-        await this.deepgramStreaming.warmup({ ...options, token });
+        // Dictation captures at 16 kHz (audioManager AudioContext). State it
+        // explicitly so this doesn't silently break if the capture rate changes.
+        await this.deepgramStreaming.warmup({ sampleRate: 16000, ...options, token });
         debugLogger.debug("Deepgram connection warmed up", {}, "streaming");
 
         return { success: true };
@@ -7308,7 +7315,7 @@ class IPCHandlers {
         };
 
         sendDropCount = 0;
-        await this.deepgramStreaming.connect({ ...options, token });
+        await this.deepgramStreaming.connect({ sampleRate: 16000, ...options, token });
         debugLogger.debug(
           "Deepgram streaming started",
           {
