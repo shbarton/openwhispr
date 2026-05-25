@@ -7,13 +7,10 @@ const SAMPLE_RATE = 24000;
 const COLD_START_BUFFER_MAX = 3 * SAMPLE_RATE * 2; // 3 seconds of 16-bit PCM
 
 // GA Realtime transcription model. The legacy ids (gpt-4o-transcribe,
-// gpt-4o-mini-transcribe, whisper-1) are file/request transcription models and
-// are not natively streamable over the GA realtime socket, so any of them are
-// mapped onto the GA streaming model.
+// gpt-4o-mini-transcribe, whisper-1) aren't natively streamable over the GA
+// socket, and this is currently the only streaming transcription model — so the
+// realtime client always uses it regardless of the configured model.
 const GA_STREAMING_MODEL = "gpt-realtime-whisper";
-const GA_STREAMING_MODELS = new Set([GA_STREAMING_MODEL]);
-const resolveGaModel = (model) =>
-  model && GA_STREAMING_MODELS.has(model) ? model : GA_STREAMING_MODEL;
 
 class OpenAIRealtimeStreaming {
   constructor() {
@@ -42,7 +39,7 @@ class OpenAIRealtimeStreaming {
   }
 
   async connect(options = {}) {
-    const { apiKey, model, preconfigured } = options;
+    const { apiKey, preconfigured } = options;
     if (!apiKey) throw new Error("OpenAI API key is required");
 
     if (this.isConnected || this.isConnecting) {
@@ -51,7 +48,7 @@ class OpenAIRealtimeStreaming {
     }
 
     this.isConnecting = true;
-    this.model = resolveGaModel(model);
+    this.model = GA_STREAMING_MODEL;
     this.preconfigured = !!preconfigured;
     this.completedSegments = [];
     this.currentPartial = "";
@@ -125,8 +122,7 @@ class OpenAIRealtimeStreaming {
       const event = JSON.parse(data.toString());
 
       switch (event.type) {
-        case "session.created":
-        case "transcription_session.created": {
+        case "session.created": {
           if (this.preconfigured) {
             // Server-side ephemeral token already configured the session;
             // sending an update would strip language and noise-reduction.
@@ -171,8 +167,7 @@ class OpenAIRealtimeStreaming {
           break;
         }
 
-        case "session.updated":
-        case "transcription_session.updated": {
+        case "session.updated": {
           if (this.pendingResolve) {
             this.isConnected = true;
             this.isConnecting = false;
