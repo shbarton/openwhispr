@@ -166,8 +166,15 @@ class MeetingDetectionEngine {
       if (action === "start" && detection) {
         const eventSummary = detection.event?.summary || "New note";
 
-        const noteResult = this.databaseManager.saveNote(eventSummary, "", "meeting");
-        const meetingsFolder = this.databaseManager.getMeetingsFolder();
+        const meetingsFolder = this.databaseManager.resolveMeetingFolder();
+        const noteResult = this.databaseManager.saveNote(
+          eventSummary,
+          "",
+          "meeting",
+          null,
+          null,
+          meetingsFolder?.id ?? null
+        );
 
         if (!noteResult?.note?.id || !meetingsFolder?.id) {
           debugLogger.error(
@@ -253,8 +260,15 @@ class MeetingDetectionEngine {
       attendees_count: 0,
     };
 
-    const noteResult = this.databaseManager.saveNote(event.summary, "", "meeting");
-    const meetingsFolder = this.databaseManager.getMeetingsFolder();
+    const meetingsFolder = this.databaseManager.resolveMeetingFolder();
+    const noteResult = this.databaseManager.saveNote(
+      event.summary,
+      "",
+      "meeting",
+      null,
+      null,
+      meetingsFolder?.id ?? null
+    );
 
     if (!noteResult?.note?.id || !meetingsFolder?.id) {
       debugLogger.error(
@@ -289,8 +303,15 @@ class MeetingDetectionEngine {
       return;
     }
 
-    const noteResult = this.databaseManager.saveNote(calEvent.summary || "New note", "", "meeting");
-    const meetingsFolder = this.databaseManager.getMeetingsFolder();
+    const meetingsFolder = this.databaseManager.resolveMeetingFolder();
+    const noteResult = this.databaseManager.saveNote(
+      calEvent.summary || "New note",
+      "",
+      "meeting",
+      null,
+      null,
+      meetingsFolder?.id ?? null
+    );
 
     if (!noteResult?.note?.id || !meetingsFolder?.id) {
       debugLogger.error(

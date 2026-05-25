@@ -103,6 +103,9 @@ contextBridge.exposeInMainWorld("electronAPI", {
   deleteFolder: (id) => ipcRenderer.invoke("db-delete-folder", id),
   renameFolder: (id, name) => ipcRenderer.invoke("db-rename-folder", id, name),
   getFolderNoteCounts: () => ipcRenderer.invoke("db-get-folder-note-counts"),
+  getDefaultMeetingFolder: () => ipcRenderer.invoke("db-get-default-meeting-folder"),
+  setDefaultMeetingFolder: (folderId) =>
+    ipcRenderer.invoke("db-set-default-meeting-folder", folderId),
 
   // Note files (markdown mirror) functions
   noteFilesSetEnabled: (enabled, customPath, options) =>
@@ -145,6 +148,11 @@ contextBridge.exposeInMainWorld("electronAPI", {
     const listener = (_event, note) => callback?.(note);
     ipcRenderer.on("note-added", listener);
     return () => ipcRenderer.removeListener("note-added", listener);
+  },
+  onMeetingDefaultFolderChanged: (callback) => {
+    const listener = (_event, payload) => callback?.(payload);
+    ipcRenderer.on("meeting-default-folder-changed", listener);
+    return () => ipcRenderer.removeListener("meeting-default-folder-changed", listener);
   },
   onNoteUpdated: (callback) => {
     const listener = (_event, note) => callback?.(note);

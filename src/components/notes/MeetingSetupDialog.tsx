@@ -1,13 +1,13 @@
 import { useState, useEffect, useMemo, useCallback, useRef } from "react";
 import { useTranslation } from "react-i18next";
-import { X, Check, ChevronDown, Search, Users, Tag, Briefcase } from "lucide-react";
+import { X, Check, ChevronDown, Search, Users, Tag, Briefcase, FolderOpen } from "lucide-react";
 import { Dialog, DialogContent, DialogTitle, DialogHeader, DialogFooter } from "../ui/dialog";
 import { Button } from "../ui/button";
 import { Input } from "../ui/input";
 import { Popover, PopoverTrigger, PopoverContent } from "../ui/popover";
 import { cn } from "../lib/utils";
 import { useNotes } from "../../stores/noteStore";
-import type { NoteItem, VaultMetadata, VaultProject } from "../../types/electron";
+import type { NoteItem, VaultMetadata, VaultProject, FolderItem } from "../../types/electron";
 import type { CalendarAttendee } from "../../types/calendar";
 import { getInitials, getInitialColor } from "../../utils/avatarUtils";
 
@@ -26,6 +26,7 @@ interface MeetingSetupDialogProps {
   onConfirm: (metadata: MeetingMetadata) => void;
   existingNote?: NoteItem | null;
   initialFolderId?: number | null;
+  folders?: FolderItem[];
 }
 
 export default function MeetingSetupDialog({
@@ -34,16 +35,22 @@ export default function MeetingSetupDialog({
   onConfirm,
   existingNote,
   initialFolderId,
+  folders = [],
 }: MeetingSetupDialogProps) {
   const { t } = useTranslation();
   const notes = useNotes();
 
   // Form state
   const [title, setTitle] = useState("");
+  const [folderId, setFolderId] = useState<number | null>(null);
   const [project, setProject] = useState("");
   const [tags, setTags] = useState<string[]>([]);
   const [participants, setParticipants] = useState<CalendarAttendee[]>([]);
   const [description, setDescription] = useState("");
+
+  // Folder picker popover
+  const [folderOpen, setFolderOpen] = useState(false);
+  const [folderSearch, setFolderSearch] = useState("");
 
   // Vault metadata for autocomplete
   const [vaultMetadata, setVaultMetadata] = useState<VaultMetadata>({
@@ -84,6 +91,7 @@ export default function MeetingSetupDialog({
 
     if (existingNote) {
       setTitle(existingNote.title || "");
+      setFolderId(existingNote.folder_id ?? initialFolderId ?? folders[0]?.id ?? null);
       setProject(existingNote.project || "");
       setTags(
         existingNote.tags
@@ -101,6 +109,7 @@ export default function MeetingSetupDialog({
       }
     } else {
       setTitle("");
+      setFolderId(initialFolderId ?? folders[0]?.id ?? null);
       setProject("");
       setTags([]);
       setParticipants([]);
@@ -110,7 +119,8 @@ export default function MeetingSetupDialog({
     setProjectSearch("");
     setTagSearch("");
     setParticipantSearch("");
-  }, [open, existingNote]);
+    setFolderSearch("");
+  }, [open, existingNote, initialFolderId, folders]);
 
   // Compute merged project list (vault + local notes)
   const allProjects = useMemo(() => {
@@ -223,13 +233,30 @@ export default function MeetingSetupDialog({
   const handleConfirm = useCallback(() => {
     onConfirm({
       title: title.trim() || t("notes.list.untitledNote"),
-      folderId: existingNote?.folder_id ?? initialFolderId ?? null,
+      folderId,
       participants,
       project: project.trim(),
       tags,
       description: description.trim(),
     });
-  }, [title, project, tags, participants, description, existingNote, initialFolderId, onConfirm, t]);
+  }, [title, folderId, project, tags, participants, description, onConfirm, t]);
+
+  const selectedFolder = useMemo(
+    () => folders.find((f) => f.id === folderId) ?? null,
+    [folders, folderId]
+  );
+
+  const filteredFolders = useMemo(() => {
+    if (!folderSearch.trim()) return folders;
+    const q = folderSearch.toLowerCase();
+    return folders.filter((f) => f.name.toLowerCase().includes(q));
+  }, [folders, folderSearch]);
+
+  const handleSelectFolder = useCallback((id: number) => {
+    setFolderId(id);
+    setFolderOpen(false);
+    setFolderSearch("");
+  }, []);
 
   const handleTagKeyDown = useCallback(
     (e: React.KeyboardEvent) => {
@@ -276,6 +303,75 @@ export default function MeetingSetupDialog({
               autoFocus
             />
           </div>
+
+          {/* Folder */}
+          {folders.length > 0 && (
+            <div className="space-y-1.5">
+              <label className="text-xs font-medium text-foreground/60">
+                {t("notes.meetingSetup.folderLabel", "Folder")}
+              </label>
+              <Popover open={folderOpen} onOpenChange={setFolderOpen}>
+                <PopoverTrigger asChild>
+                  <button
+                    className={cn(
+                      "flex items-center justify-between w-full h-9 px-3 rounded-md border text-sm transition-colors",
+                      "border-border/70 bg-input hover:border-border-hover",
+                      "dark:bg-surface-1 dark:border-border-subtle/50",
+                      "focus:outline-none focus:ring-2 focus:ring-primary/10 focus:border-primary",
+                      !selectedFolder && "text-foreground/40"
+                    )}
+                  >
+                    <span className="flex items-center gap-2 truncate">
+                      <FolderOpen size={14} className="shrink-0 text-foreground/30" />
+                      {selectedFolder?.name ||
+                        t("notes.meetingSetup.folderPlaceholder", "Select folder...")}
+                    </span>
+                    <ChevronDown size={14} className="shrink-0 text-foreground/30" />
+                  </button>
+                </PopoverTrigger>
+                <PopoverContent className="w-[var(--radix-popover-trigger-width)] p-0">
+                  <div className="p-2 border-b border-border/50">
+                    <div className="relative">
+                      <Search
+                        size={13}
+                        className="absolute left-2.5 top-1/2 -translate-y-1/2 text-foreground/20"
+                      />
+                      <input
+                        value={folderSearch}
+                        onChange={(e) => setFolderSearch(e.target.value)}
+                        placeholder={t("notes.meetingSetup.searchFolders", "Search folders...")}
+                        className="w-full h-8 pl-8 pr-3 rounded-md bg-foreground/[0.03] dark:bg-white/[0.04] border border-foreground/8 dark:border-white/8 text-xs text-foreground placeholder:text-foreground/20 outline-none focus:border-primary/30"
+                        autoFocus
+                      />
+                    </div>
+                  </div>
+                  <div className="max-h-48 overflow-y-auto p-1">
+                    {filteredFolders.length === 0 ? (
+                      <div className="px-2 py-3 text-center text-xs text-foreground/30">
+                        {t("notes.meetingSetup.noFoldersFound", "No folders found")}
+                      </div>
+                    ) : (
+                      filteredFolders.map((f) => (
+                        <button
+                          key={f.id}
+                          onClick={() => handleSelectFolder(f.id)}
+                          className={cn(
+                            "flex items-center gap-2 w-full px-2 py-1.5 rounded-md text-xs transition-colors",
+                            "hover:bg-foreground/5 dark:hover:bg-white/5",
+                            folderId === f.id && "bg-primary/5 text-primary"
+                          )}
+                        >
+                          <FolderOpen size={12} className="shrink-0 text-foreground/30" />
+                          <span className="truncate">{f.name}</span>
+                          {folderId === f.id && <Check size={12} className="ml-auto shrink-0" />}
+                        </button>
+                      ))
+                    )}
+                  </div>
+                </PopoverContent>
+              </Popover>
+            </div>
+          )}
 
           {/* Project */}
           <div className="space-y-1.5">

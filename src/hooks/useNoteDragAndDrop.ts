@@ -1,5 +1,4 @@
 import { useState, useCallback, useRef, useEffect } from "react";
-import { MEETINGS_FOLDER_NAME } from "../components/notes/shared";
 
 interface DragState {
   draggingNoteId: number | null;
@@ -70,10 +69,11 @@ export function useNoteDragAndDrop({ onMoveToFolder, currentFolderId }: UseNoteD
   );
 
   const folderDropHandlers = useCallback(
-    (folderId: number, folderName: string) => {
-      const isMeetings = folderName === MEETINGS_FOLDER_NAME;
+    (folderId: number, _folderName: string) => {
+      // Any folder can receive notes (including meetings) — the only block is
+      // dropping into the folder the note already lives in.
       const isSameFolder = folderId === currentFolderId;
-      const canDrop = !isMeetings && !isSameFolder;
+      const canDrop = !isSameFolder;
 
       return {
         onDragOver: (e: React.DragEvent) => {

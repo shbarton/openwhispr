@@ -12,6 +12,7 @@ import {
   Search,
   Sparkles,
   ExternalLink,
+  Video,
 } from "lucide-react";
 import { Button } from "../ui/button";
 import {
@@ -46,13 +47,13 @@ import ActionPicker from "./ActionPicker";
 import ActionManagerDialog from "./ActionManagerDialog";
 import AddNotesToFolderDialog from "./AddNotesToFolderDialog";
 import MeetingSetupDialog, { type MeetingMetadata } from "./MeetingSetupDialog";
-import type { NoteItem } from "../../types/electron";
+import type { NoteItem, FolderItem } from "../../types/electron";
 import { useActionProcessing } from "../../hooks/useActionProcessing";
 import { useSettingsStore, selectIsCloudCleanupMode } from "../../stores/settingsStore";
 import { useFolderManagement } from "../../hooks/useFolderManagement";
 import { useNoteDragAndDrop } from "../../hooks/useNoteDragAndDrop";
 import { cn } from "../lib/utils";
-import { MEETINGS_FOLDER_NAME, findDefaultFolder } from "./shared";
+import { findDefaultFolder } from "./shared";
 import logger from "../../utils/logger";
 import { parseTranscriptSegments } from "../../utils/parseTranscriptSegments";
 import { serializeTranscriptSegments } from "../../utils/transcriptSpeakerState";
@@ -196,6 +197,27 @@ export default function PersonalNotesView({
       });
     },
     [folderCounts, handleDeleteFolder, showConfirmDialog, t]
+  );
+
+  // Toggle which folder auto-detected meetings land in. Clicking the current
+  // default clears it (routing falls back to the built-in Meetings folder).
+  const handleToggleMeetingDefault = useCallback(
+    async (folder: FolderItem) => {
+      const next = folder.is_meeting_default ? null : folder.id;
+      try {
+        const result = await window.electronAPI.setDefaultMeetingFolder?.(next);
+        if (result?.success) {
+          await loadFolders();
+        }
+      } catch (err) {
+        logger.warn(
+          "Failed to set meeting default folder",
+          { folderId: next, error: (err as Error).message },
+          "notes"
+        );
+      }
+    },
+    [loadFolders]
   );
 
   const activeNote = notes.find((n) => n.id === activeNoteId) ?? null;
@@ -374,8 +396,15 @@ export default function PersonalNotesView({
           tags: metadata.tags.length > 0 ? metadata.tags.join(", ") : null,
           description: metadata.description || null,
         });
-        // Refresh the note in store
-        await initializeNotes(null, 50, activeFolderId);
+        // If the meeting moved to a different folder, follow it there so the
+        // note stays visible (mirrors handleMoveToFolder); otherwise just
+        // refresh the current folder's notes.
+        if (metadata.folderId && metadata.folderId !== activeFolderId) {
+          setActiveFolderId(metadata.folderId);
+          await initializeNotes(null, 50, metadata.folderId);
+        } else {
+          await initializeNotes(null, 50, activeFolderId);
+        }
         loadFolders();
       }
       setShowMeetingSetup(false);
@@ -690,7 +719,6 @@ export default function PersonalNotesView({
           <div className="px-1.5 space-y-px">
             {folders.map((folder) => {
               const isActive = folder.id === activeFolderId;
-              const isMeetings = folder.name === MEETINGS_FOLDER_NAME;
               const count = folderCounts[folder.id] || 0;
               const isRenaming = renamingFolderId === folder.id;
 
@@ -730,7 +758,6 @@ export default function PersonalNotesView({
                       ? "bg-primary/8 dark:bg-primary/10"
                       : "hover:bg-foreground/4 dark:hover:bg-white/4",
                     isDragOver &&
-                      !isMeetings &&
                       "bg-primary/12 dark:bg-primary/15 ring-1 ring-primary/25 scale-[1.02]",
                     isDropSuccess &&
                       "bg-emerald-500/10 dark:bg-emerald-400/10 ring-1 ring-emerald-500/20"
@@ -756,6 +783,14 @@ export default function PersonalNotesView({
                     {folder.name}
                   </span>
 
+                  {folder.is_meeting_default ? (
+                    <Video
+                      size={11}
+                      className="shrink-0 text-primary/60 group-hover:opacity-0 transition-opacity"
+                      aria-label={t("notes.folders.meetingDefaultBadge", "Meetings land here")}
+                    />
+                  ) : null}
+
                   {isDropSuccess ? (
                     <Check
                       size={10}
@@ -773,20 +808,34 @@ export default function PersonalNotesView({
                       {count > 0 ? count : ""}
                     </span>
                   )}
-                  {(!folder.is_default || noteFilesEnabled) && (
-                    <DropdownMenu>
-                      <DropdownMenuTrigger asChild>
-                        <span
-                          role="button"
-                          tabIndex={-1}
-                          onClick={(e) => e.stopPropagation()}
-                          className="h-4 w-4 flex items-center justify-center rounded-sm opacity-0 group-hover:opacity-100 data-[state=open]:opacity-100 transition-opacity absolute right-1.5 text-foreground/25 hover:text-foreground/50 cursor-pointer"
-                        >
-                          <MoreHorizontal size={11} />
-                        </span>
-                      </DropdownMenuTrigger>
-                      <DropdownMenuContent align="end" sideOffset={4} className="min-w-32">
-                        {noteFilesEnabled && (
+                  <DropdownMenu>
+                    <DropdownMenuTrigger asChild>
+                      <span
+                        role="button"
+                        tabIndex={-1}
+                        onClick={(e) => e.stopPropagation()}
+                        className="h-4 w-4 flex items-center justify-center rounded-sm opacity-0 group-hover:opacity-100 data-[state=open]:opacity-100 transition-opacity absolute right-1.5 text-foreground/25 hover:text-foreground/50 cursor-pointer"
+                      >
+                        <MoreHorizontal size={11} />
+                      </span>
+                    </DropdownMenuTrigger>
+                    <DropdownMenuContent align="end" sideOffset={4} className="min-w-32">
+                      <DropdownMenuItem
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          handleToggleMeetingDefault(folder);
+                        }}
+                        className="text-xs gap-2 rounded-md px-2 py-1"
+                      >
+                        <Video size={11} className="text-muted-foreground/60" />
+                        {folder.is_meeting_default
+                          ? t("notes.folders.unsetMeetingDefault", "Don't route meetings here")
+                          : t("notes.folders.setMeetingDefault", "Meetings land here")}
+                        {folder.is_meeting_default && <Check size={11} className="ml-auto" />}
+                      </DropdownMenuItem>
+                      {noteFilesEnabled && (
+                        <>
+                          <DropdownMenuSeparator />
                           <DropdownMenuItem
                             onClick={(e) => {
                               e.stopPropagation();
@@ -797,37 +846,37 @@ export default function PersonalNotesView({
                             <ExternalLink size={11} className="text-muted-foreground/60" />
                             {t("notes.context.showInFileManager", { manager: fileManagerName })}
                           </DropdownMenuItem>
-                        )}
-                        {!folder.is_default && (
-                          <>
-                            {noteFilesEnabled && <DropdownMenuSeparator />}
-                            <DropdownMenuItem
-                              onClick={(e) => {
-                                e.stopPropagation();
-                                setRenamingFolderId(folder.id);
-                                setRenameValue(folder.name);
-                              }}
-                              className="text-xs gap-2 rounded-md px-2 py-1"
-                            >
-                              <Pencil size={11} className="text-muted-foreground/60" />
-                              {t("notes.context.rename")}
-                            </DropdownMenuItem>
-                            <DropdownMenuSeparator />
-                            <DropdownMenuItem
-                              onClick={(e) => {
-                                e.stopPropagation();
-                                requestDeleteFolder(folder);
-                              }}
-                              className="text-xs gap-2 rounded-md px-2 py-1 text-destructive focus:text-destructive focus:bg-destructive/10"
-                            >
-                              <Trash2 size={11} />
-                              {t("notes.context.delete")}
-                            </DropdownMenuItem>
-                          </>
-                        )}
-                      </DropdownMenuContent>
-                    </DropdownMenu>
-                  )}
+                        </>
+                      )}
+                      {!folder.is_default && (
+                        <>
+                          <DropdownMenuSeparator />
+                          <DropdownMenuItem
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              setRenamingFolderId(folder.id);
+                              setRenameValue(folder.name);
+                            }}
+                            className="text-xs gap-2 rounded-md px-2 py-1"
+                          >
+                            <Pencil size={11} className="text-muted-foreground/60" />
+                            {t("notes.context.rename")}
+                          </DropdownMenuItem>
+                          <DropdownMenuSeparator />
+                          <DropdownMenuItem
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              requestDeleteFolder(folder);
+                            }}
+                            className="text-xs gap-2 rounded-md px-2 py-1 text-destructive focus:text-destructive focus:bg-destructive/10"
+                          >
+                            <Trash2 size={11} />
+                            {t("notes.context.delete")}
+                          </DropdownMenuItem>
+                        </>
+                      )}
+                    </DropdownMenuContent>
+                  </DropdownMenu>
                 </button>
               );
             })}
@@ -1225,6 +1274,7 @@ export default function PersonalNotesView({
         onConfirm={handleMeetingMetadataConfirm}
         existingNote={activeNote}
         initialFolderId={activeFolderId}
+        folders={folders}
       />
 
       <Dialog

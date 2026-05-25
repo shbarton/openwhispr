@@ -495,6 +495,43 @@ class DatabaseManager {
         if (!err.message.includes("duplicate column")) throw err;
       }
 
+      // Configurable meeting destination: which folder auto-detected meetings
+      // land in. Defaults to the seeded "Meetings" folder so behavior is
+      // unchanged until the user picks another. Device-local for now — the
+      // flag is not synced to cloud (see resolveMeetingFolderId /
+      // setMeetingDefaultFolder). Placed after the folder sync columns so the
+      // partial index below can reference deleted_at.
+      try {
+        this.db.exec(
+          "ALTER TABLE folders ADD COLUMN is_meeting_default INTEGER NOT NULL DEFAULT 0"
+        );
+      } catch (err) {
+        if (!err.message.includes("duplicate column")) throw err;
+      }
+      // At most one meeting-default folder at a time (excluding tombstones).
+      this.db.exec(`
+        CREATE UNIQUE INDEX IF NOT EXISTS idx_one_meeting_default
+        ON folders(is_meeting_default)
+        WHERE is_meeting_default = 1 AND deleted_at IS NULL
+      `);
+      // Ensure a default exists: seed it onto the built-in Meetings folder if
+      // nothing is set yet (fresh install or migrating an existing DB).
+      const hasMeetingDefault = this.db
+        .prepare(
+          "SELECT id FROM folders WHERE is_meeting_default = 1 AND deleted_at IS NULL"
+        )
+        .get();
+      if (!hasMeetingDefault) {
+        const meetingsFolder = this.db
+          .prepare("SELECT id FROM folders WHERE name = 'Meetings' AND is_default = 1")
+          .get();
+        if (meetingsFolder) {
+          this.db
+            .prepare("UPDATE folders SET is_meeting_default = 1 WHERE id = ?")
+            .run(meetingsFolder.id);
+        }
+      }
+
       // Sync columns for agent_conversations
       try {
         this.db.exec("ALTER TABLE agent_conversations ADD COLUMN client_conversation_id TEXT");
@@ -788,11 +825,16 @@ class DatabaseManager {
         throw new Error("Database not initialized");
       }
       if (!folderId) {
-        const defaultFolderName = noteType === "meeting" ? "Meetings" : "Personal";
-        const defaultFolder = this.db
-          .prepare("SELECT id FROM folders WHERE name = ? AND is_default = 1")
-          .get(defaultFolderName);
-        folderId = defaultFolder?.id || null;
+        if (noteType === "meeting") {
+          // Honor the configurable meeting-default folder; falls back to the
+          // built-in Meetings folder inside the resolver.
+          folderId = this.resolveMeetingFolderId();
+        } else {
+          const defaultFolder = this.db
+            .prepare("SELECT id FROM folders WHERE name = 'Personal' AND is_default = 1")
+            .get();
+          folderId = defaultFolder?.id || null;
+        }
       }
       const clientNoteId = randomUUID();
 
@@ -1619,16 +1661,73 @@ class DatabaseManager {
     }
   }
 
-  getMeetingsFolder() {
+  // Where auto-detected meetings should land. Resolution order:
+  //   1. The user-chosen meeting-default folder (is_meeting_default = 1)
+  //   2. The built-in "Meetings" folder (back-compat fallback)
+  //   3. null (caller falls back to its own default)
+  // Returns the folder row ({ id, ... }) or null. Used for both the saved
+  // folder_id and post-detection navigation so the two never diverge.
+  resolveMeetingFolder() {
     try {
       if (!this.db) throw new Error("Database not initialized");
+      const chosen = this.db
+        .prepare(
+          "SELECT * FROM folders WHERE is_meeting_default = 1 AND deleted_at IS NULL"
+        )
+        .get();
+      if (chosen) return chosen;
       return (
         this.db
-          .prepare("SELECT id FROM folders WHERE name = 'Meetings' AND is_default = 1")
+          .prepare(
+            "SELECT * FROM folders WHERE name = 'Meetings' AND is_default = 1 AND deleted_at IS NULL"
+          )
           .get() || null
       );
     } catch (error) {
-      debugLogger.error("Error getting meetings folder", { error: error.message }, "gcal");
+      debugLogger.error("Error resolving meeting folder", { error: error.message }, "notes");
+      throw error;
+    }
+  }
+
+  resolveMeetingFolderId() {
+    return this.resolveMeetingFolder()?.id ?? null;
+  }
+
+  // Back-compat alias — now honors the configurable default.
+  getMeetingsFolder() {
+    return this.resolveMeetingFolder();
+  }
+
+  getDefaultMeetingFolderId() {
+    return this.resolveMeetingFolderId();
+  }
+
+  // Single-select: clear any existing meeting default, then set the chosen
+  // folder. Pass null to clear (routing falls back to the built-in Meetings
+  // folder). Wrapped in a transaction so the partial unique index never sees
+  // two defaults mid-update.
+  setMeetingDefaultFolder(folderId) {
+    try {
+      if (!this.db) throw new Error("Database not initialized");
+      if (folderId != null) {
+        const folder = this.db
+          .prepare("SELECT id FROM folders WHERE id = ? AND deleted_at IS NULL")
+          .get(folderId);
+        if (!folder) return { success: false, error: "Folder not found" };
+      }
+      this.db.transaction(() => {
+        this.db
+          .prepare("UPDATE folders SET is_meeting_default = 0 WHERE is_meeting_default = 1")
+          .run();
+        if (folderId != null) {
+          this.db
+            .prepare("UPDATE folders SET is_meeting_default = 1 WHERE id = ?")
+            .run(folderId);
+        }
+      })();
+      return { success: true, folderId: folderId ?? null };
+    } catch (error) {
+      debugLogger.error("Error setting meeting default folder", { error: error.message }, "notes");
       throw error;
     }
   }

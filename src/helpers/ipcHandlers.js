@@ -1074,6 +1074,22 @@ class IPCHandlers {
       return this.databaseManager.getFolderNoteCounts();
     });
 
+    ipcMain.handle("db-get-default-meeting-folder", async () => {
+      return this.databaseManager.getDefaultMeetingFolderId();
+    });
+
+    ipcMain.handle("db-set-default-meeting-folder", async (event, folderId) => {
+      const result = this.databaseManager.setMeetingDefaultFolder(folderId ?? null);
+      if (result?.success) {
+        setImmediate(() => {
+          this.broadcastToWindows("meeting-default-folder-changed", {
+            folderId: result.folderId,
+          });
+        });
+      }
+      return result;
+    });
+
     ipcMain.handle("db-get-actions", async () => {
       return this.databaseManager.getActions();
     });
@@ -3877,6 +3893,10 @@ class IPCHandlers {
           source,
           type: "final",
           timestamp,
+          // [latency-probe] Wall-clock at emit. The renderer compares this to
+          // its own Date.now() on receipt; a growing gap means the renderer
+          // render path is falling behind real-time IPC, not the network.
+          emittedAt: Date.now(),
         });
       }
     };
@@ -4498,13 +4518,29 @@ class IPCHandlers {
       const sent = streaming.sendAudio(outbound);
       meetingSendCounts[source]++;
       if (meetingSendCounts[source] <= 5 || meetingSendCounts[source] % 100 === 0) {
-        debugLogger.debug("Meeting audio send", {
+        // [latency-probe] Audio actually streamed to Deepgram vs wall-clock
+        // elapsed. Meeting audio is 16-bit PCM @ 24 kHz, so seconds =
+        // bytes / (2 * 24000). audioSecondsSent should track wallSecondsElapsed;
+        // a growing feedLagSeconds means audio reaches Deepgram slower than
+        // real-time (and the backlog drains for minutes after the call ends).
+        const audioSecondsSent = streaming.audioBytesSent / (2 * 24000);
+        const wallSecondsElapsed = meetingStartedAt
+          ? (Date.now() - meetingStartedAt) / 1000
+          : null;
+        debugLogger.info("Meeting audio send", {
           source,
           bytes: buffer.length,
           sent,
           wsReady: streaming.ws?.readyState,
           totalSent: streaming.audioBytesSent,
           count: meetingSendCounts[source],
+          audioSecondsSent: Number(audioSecondsSent.toFixed(1)),
+          wallSecondsElapsed:
+            wallSecondsElapsed == null ? null : Number(wallSecondsElapsed.toFixed(1)),
+          feedLagSeconds:
+            wallSecondsElapsed == null
+              ? null
+              : Number((wallSecondsElapsed - audioSecondsSent).toFixed(1)),
         });
       }
     };

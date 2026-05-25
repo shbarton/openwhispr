@@ -1,4 +1,4 @@
-import { useCallback, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { Cloud, Key, Cpu, Network, FolderOpen, Check, X } from "lucide-react";
 import { useSettingsStore } from "../../stores/settingsStore";
@@ -9,7 +9,7 @@ import { Input } from "../ui/input";
 import { Button } from "../ui/button";
 import TranscriptionModelPicker from "../TranscriptionModelPicker";
 import SelfHostedPanel from "../SelfHostedPanel";
-import type { InferenceMode } from "../../types/electron";
+import type { InferenceMode, FolderItem } from "../../types/electron";
 
 export function MeetingSpeakerDetectionRow() {
   const { t } = useTranslation();
@@ -115,6 +115,66 @@ export function VaultPathRow() {
           {t("settings.meeting.vaultPath.invalid", "Not a valid Calyx vault (no .chiron/properties-index.json)")}
         </p>
       )}
+    </SettingsRow>
+  );
+}
+
+export function MeetingDefaultFolderRow() {
+  const { t } = useTranslation();
+  const [folders, setFolders] = useState<FolderItem[]>([]);
+  const [defaultFolderId, setDefaultFolderId] = useState<number | null>(null);
+
+  useEffect(() => {
+    let cancelled = false;
+    Promise.all([
+      window.electronAPI?.getFolders?.() ?? Promise.resolve([]),
+      window.electronAPI?.getDefaultMeetingFolder?.() ?? Promise.resolve(null),
+    ]).then(([items, current]) => {
+      if (cancelled) return;
+      setFolders(items ?? []);
+      setDefaultFolderId(current ?? null);
+    });
+    // Stay in sync when the default is changed elsewhere (e.g. the folder
+    // context menu in the notes view).
+    const unsubscribe = window.electronAPI?.onMeetingDefaultFolderChanged?.((payload) => {
+      setDefaultFolderId(payload?.folderId ?? null);
+    });
+    return () => {
+      cancelled = true;
+      unsubscribe?.();
+    };
+  }, []);
+
+  const handleChange = useCallback(async (e: React.ChangeEvent<HTMLSelectElement>) => {
+    const next = e.target.value ? Number(e.target.value) : null;
+    try {
+      const result = await window.electronAPI?.setDefaultMeetingFolder?.(next);
+      if (result?.success) setDefaultFolderId(result.folderId ?? next);
+    } catch {
+      // Swallow — local state is unchanged on failure, so the dropdown
+      // simply keeps showing the previous selection.
+    }
+  }, []);
+
+  return (
+    <SettingsRow
+      label={t("settings.meeting.defaultFolder.title", "Default meeting folder")}
+      description={t(
+        "settings.meeting.defaultFolder.description",
+        "Where auto-detected meetings are filed. You can also set this from the folder menu in Notes."
+      )}
+    >
+      <select
+        value={defaultFolderId ?? ""}
+        onChange={handleChange}
+        className="h-8 text-xs rounded-md border border-border/70 bg-input px-2 dark:bg-surface-1 dark:border-border-subtle/50 focus:outline-none focus:ring-2 focus:ring-primary/10 focus:border-primary max-w-sm"
+      >
+        {folders.map((f) => (
+          <option key={f.id} value={f.id}>
+            {f.name}
+          </option>
+        ))}
+      </select>
     </SettingsRow>
   );
 }
@@ -252,6 +312,7 @@ export function MeetingTranscriptionPanel() {
         </>
       )}
       <MeetingSpeakerDetectionRow />
+      <MeetingDefaultFolderRow />
       <VaultPathRow />
     </div>
   );

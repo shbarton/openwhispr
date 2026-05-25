@@ -130,6 +130,8 @@ export interface FolderItem {
   id: number;
   name: string;
   is_default: number;
+  /** 1 if auto-detected meetings route to this folder. Device-local (not synced). */
+  is_meeting_default?: number;
   sort_order: number;
   created_at: string;
   updated_at: string;
@@ -587,6 +589,12 @@ declare global {
         name: string
       ) => Promise<{ success: boolean; folder?: FolderItem; error?: string }>;
       getFolderNoteCounts: () => Promise<Array<{ folder_id: number; count: number }>>;
+      /** Folder id auto-detected meetings currently route to (null if none). */
+      getDefaultMeetingFolder: () => Promise<number | null>;
+      /** Set the meeting destination folder; pass null to clear (falls back to built-in Meetings). */
+      setDefaultMeetingFolder: (
+        folderId: number | null
+      ) => Promise<{ success: boolean; folderId?: number | null; error?: string }>;
 
       // Note files (markdown mirror)
       noteFilesSetEnabled?: (
@@ -651,6 +659,9 @@ declare global {
 
       // Note event listeners
       onNoteAdded?: (callback: (note: NoteItem) => void) => () => void;
+      onMeetingDefaultFolderChanged?: (
+        callback: (payload: { folderId: number | null }) => void
+      ) => () => void;
       onNoteUpdated?: (callback: (note: NoteItem) => void) => () => void;
       onNoteDeleted?: (callback: (payload: { id: number }) => void) => () => void;
 

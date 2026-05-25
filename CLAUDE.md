@@ -1,3 +1,64 @@
+# Sam's OpenWhispr Fork — Orientation
+
+> This top section mirrors `AGENTS.md`. The full **technical reference** for the
+> codebase follows below it. Read this header for *why this fork exists and how
+> we work in it*; read the technical reference for *how the code is built*.
+
+## What this repo is
+
+This is **Sam Barton's fork** of [OpenWhispr](https://github.com/OpenWhispr/openwhispr) —
+an Electron dictation + meeting-transcription app — extended to feel like a
+native part of **Calyx / the PlatosRaveCave vault** rather than a standalone tool.
+
+- **Fork (origin):** https://github.com/shbarton/openwhispr
+- **Upstream:** https://github.com/OpenWhispr/openwhispr
+- **This clone:** `~/Documents/GitHub/openwhispr`
+
+## Project tracking lives in the vault — read it before you build
+
+All planning, task specs, progress logs, and design decisions live in the
+**PlatosRaveCave vault**, not in this repo:
+
+- **Project hub:** `~/Desktop/PlatosRaveCave/projects/openwhispr/index.md` → `[[OpenWhispr — Fork + Wrapper]]`
+- **Progress log:** `~/Desktop/PlatosRaveCave/projects/openwhispr/progress.md`
+- **Task specs:** `~/Desktop/PlatosRaveCave/projects/openwhispr/tasks/<task-slug>/index.md`
+- **Architecture contracts:** `~/Desktop/PlatosRaveCave/projects/openwhispr/docs/` (e.g. `vault-meeting-spec.md`, `settings-plan.md`)
+
+Open the project hub and the relevant task's `index.md` before starting work —
+the task files carry scout/Codex review findings, blockers, and resolved design
+decisions you should not re-derive.
+
+## The three-layer strategy (where a change goes)
+
+1. **Stock OpenWhispr behavior** — use as-is. Don't reskin, don't fight it.
+2. **Fork-only patches** — features not upstream. Own branch in the fork.
+   **No upstream PRs** (deferred indefinitely, 2026-05-13). Stay current by
+   merging `upstream/main` into our branches.
+3. **Sam-specific wrapper** — Chiron frontmatter, vault paths, autocomplete.
+   Prefer building **outside** the OpenWhispr tree (post-processor) to avoid merge pain.
+
+Order: stock → fork patch → wrapper. **Never fork wholesale, never PR upstream.**
+
+## Fork workflow
+
+```sh
+git fetch upstream && git checkout main && git merge upstream/main && git push origin main
+```
+
+Feature work goes on its own branch (e.g. `feat/meeting-byok-deepgram-v2`), pushed to `origin`.
+
+## House rules
+
+- **Don't reskin** the shadcn UI into Calyx's Liquid Glass. Deliberate Calyx
+  visual-alignment tasks (tokens, typography) are a separate track; cosmetic
+  reskinning is not.
+- **Wrapper before fork.** Default to building outside the tree.
+- Vault = source of truth for *planning*; git log = source of truth for *what
+  changed*. Keep `progress.md` updated with *why*.
+- **Use Node 24** for `npm install` (matches CI / `.nvmrc`).
+
+---
+
 # OpenWhispr Technical Reference for AI Assistants
 
 This document provides comprehensive technical details about the OpenWhispr project architecture for AI assistants working on the codebase.

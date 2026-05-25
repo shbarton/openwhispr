@@ -29,6 +29,10 @@
       "speakerDetection": {
         "title": "Identify and label speakers",
         "description": "When off, transcripts show \"You\" and \"Others\""
+      },
+      "defaultFolder": {
+        "title": "Default meeting folder",
+        "description": "Where auto-detected meetings are filed. You can also set this from the folder menu in Notes."
       }
     }
   },
@@ -1917,7 +1921,10 @@
       "deleteTitle": "Delete folder?",
       "deleteDescription": "This will permanently delete \"{{name}}\" and its {{count}} note(s). This cannot be undone.",
       "deleteDescriptionEmpty": "This will permanently delete \"{{name}}\". This cannot be undone.",
-      "deleteConfirm": "Delete folder and notes"
+      "deleteConfirm": "Delete folder and notes",
+      "setMeetingDefault": "Meetings land here",
+      "unsetMeetingDefault": "Don't route meetings here",
+      "meetingDefaultBadge": "Meetings land here"
     },
     "list": {
       "title": "Notes",

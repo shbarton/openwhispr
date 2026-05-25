@@ -864,6 +864,7 @@ export async function startRecording(args: StartRecordingArgs): Promise<void> {
         source: "mic" | "system";
         type: "partial" | "final" | "retract";
         timestamp?: number;
+        emittedAt?: number;
       }) => {
         if (data.type === "retract") {
           const next = useMeetingRecordingStore
@@ -892,6 +893,13 @@ export async function startRecording(args: StartRecordingArgs): Promise<void> {
           }
           return;
         }
+
+        // [latency-probe] Measure how far behind real-time this final segment
+        // is rendering and how much the per-segment handler work costs.
+        const handlerStart =
+          typeof performance !== "undefined" ? performance.now() : Date.now();
+        const ipcLagMs =
+          typeof data.emittedAt === "number" ? Date.now() - data.emittedAt : null;
 
         let rawSegment: TranscriptSegment = normalizeTranscriptSegment({
           id: `seg-${++segmentCounter}`,
@@ -930,6 +938,26 @@ export async function startRecording(args: StartRecordingArgs): Promise<void> {
           transcript: buildTranscriptText(next),
           ...partialPatch,
         });
+
+        // [latency-probe] If ipcLagMs grows over the meeting, the renderer is
+        // falling behind real-time IPC segments (render-path saturation) — the
+        // likely cause of transcripts arriving minutes after the call. handlerMs
+        // and segmentCount show whether per-segment work scales with transcript
+        // size (buildTranscriptText rebuilds the whole transcript each segment).
+        const handlerMs =
+          (typeof performance !== "undefined" ? performance.now() : Date.now()) - handlerStart;
+        // Log every final so even a short test yields data (diagnostic).
+        logger.info(
+          "Meeting segment render timing",
+          {
+            ipcLagMs,
+            handlerMs: Number(handlerMs.toFixed(1)),
+            segmentCount: next.length,
+            seq: segmentCounter,
+          },
+          "meeting"
+        );
+
         if (data.source === "system" && seg.speaker) {
           rememberSystemSpeaker(
             seg.speaker,
