@@ -217,6 +217,7 @@ export function FolderLocationsPanel() {
     count: number;
   } | null>(null);
   const [newFolderName, setNewFolderName] = useState("");
+  const [adding, setAdding] = useState(false);
   // True while a Move/Leave choice is in flight, so dialog dismissal (Escape/
   // overlay/Cancel) knows whether to revert the edited path field.
   const moveActionRef = useRef(false);
@@ -317,6 +318,7 @@ export function FolderLocationsPanel() {
     const res = await window.electronAPI?.createFolder?.(name);
     if (res?.success) {
       setNewFolderName("");
+      setAdding(false);
       await load();
     } else {
       toast({
@@ -498,34 +500,56 @@ export function FolderLocationsPanel() {
           );
         })}
 
-        <div className="px-3 py-2.5 border-t border-border/30 dark:border-border-subtle/50">
-          <div className="flex items-center gap-2">
-            <span className="text-xs font-medium text-muted-foreground min-w-0 flex-1 truncate">
-              {t("settings.folders.addLabel", "New folder")}
-            </span>
-            <div className="flex items-center gap-1.5 w-full max-w-sm">
+        {adding ? (
+          <div className="px-3 py-2.5 border-t border-border/30 dark:border-border-subtle/50">
+            <div className="flex items-center gap-1.5">
               <Input
+                autoFocus
                 value={newFolderName}
                 onChange={(e) => setNewFolderName(e.target.value)}
                 onKeyDown={(e) => {
                   if (e.key === "Enter") handleCreateFolder();
+                  if (e.key === "Escape") {
+                    setNewFolderName("");
+                    setAdding(false);
+                  }
                 }}
                 placeholder={t("settings.folders.addPlaceholder", "New folder name")}
-                className="h-8 text-xs"
+                className="h-8 text-xs flex-1"
               />
               <Button
                 variant="outline"
                 size="sm"
                 onClick={handleCreateFolder}
                 disabled={!newFolderName.trim()}
-                className="h-8 px-2 shrink-0"
-                title={t("settings.folders.add", "Add folder")}
+                className="h-8 px-3 shrink-0"
               >
-                <Plus size={14} />
+                {t("settings.folders.add", "Add")}
+              </Button>
+              <Button
+                variant="ghost"
+                size="sm"
+                onClick={() => {
+                  setNewFolderName("");
+                  setAdding(false);
+                }}
+                className="h-8 px-2 shrink-0 text-muted-foreground"
+                title={t("common.cancel", "Cancel")}
+              >
+                <X size={14} />
               </Button>
             </div>
           </div>
-        </div>
+        ) : (
+          <button
+            type="button"
+            onClick={() => setAdding(true)}
+            className="w-full px-3 py-2.5 border-t border-border/30 dark:border-border-subtle/50 flex items-center gap-2 text-xs text-muted-foreground/70 hover:text-foreground transition-colors"
+          >
+            <Plus size={13} />
+            {t("settings.folders.addLabel", "New folder")}
+          </button>
+        )}
       </SettingsPanel>
 
       <ThreeOptionDialog
