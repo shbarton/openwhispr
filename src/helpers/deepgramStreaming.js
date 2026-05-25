@@ -144,7 +144,6 @@ class DeepgramStreaming {
       punctuate: "true",
       interim_results: "true",
       smart_format: "true",
-      no_delay: "true",
     });
     if (lang) {
       params.set("language", lang);
