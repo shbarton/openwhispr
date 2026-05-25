@@ -585,7 +585,10 @@ declare global {
       createFolder: (
         name: string
       ) => Promise<{ success: boolean; folder?: FolderItem; error?: string }>;
-      deleteFolder: (id: number) => Promise<{ success: boolean; error?: string }>;
+      deleteFolder: (
+        id: number,
+        deleteFiles?: boolean
+      ) => Promise<{ success: boolean; error?: string }>;
       renameFolder: (
         id: number,
         name: string

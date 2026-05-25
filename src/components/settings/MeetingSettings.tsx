@@ -347,8 +347,8 @@ export function FolderLocationsPanel() {
   );
 
   const handleDelete = useCallback(
-    async (id: number) => {
-      const res = await window.electronAPI?.deleteFolder?.(id);
+    async (id: number, deleteFiles: boolean) => {
+      const res = await window.electronAPI?.deleteFolder?.(id, deleteFiles);
       if (res?.success) {
         await load();
       } else {
@@ -540,31 +540,53 @@ export function FolderLocationsPanel() {
         }}
       />
 
+      {/* Empty folder — nothing on disk, so a plain confirm. */}
       <ConfirmDialog
-        open={confirmDelete !== null}
+        open={confirmDelete !== null && confirmDelete.count === 0}
         onOpenChange={(open) => {
           if (!open) setConfirmDelete(null);
         }}
         title={t("settings.folders.deleteTitle", "Delete folder?")}
         description={
           confirmDelete
-            ? confirmDelete.count > 0
-              ? t("settings.folders.deleteDescription", {
-                  name: confirmDelete.name,
-                  count: confirmDelete.count,
-                  defaultValue:
-                    'Delete “{{name}}” and its {{count}} note(s)? This can\'t be undone.',
-                })
-              : t("settings.folders.deleteDescriptionEmpty", {
-                  name: confirmDelete.name,
-                  defaultValue: 'Delete “{{name}}”?',
-                })
+            ? t("settings.folders.deleteDescriptionEmpty", {
+                name: confirmDelete.name,
+                defaultValue: 'Remove “{{name}}” from the app?',
+              })
             : ""
         }
         confirmText={t("settings.folders.deleteConfirm", "Delete")}
         variant="destructive"
         onConfirm={() => {
-          if (confirmDelete) handleDelete(confirmDelete.id);
+          if (confirmDelete) handleDelete(confirmDelete.id, false);
+        }}
+      />
+
+      {/* Folder with notes — always remove from the app, then choose whether the
+          on-disk note files (which may live in the user's vault) are kept. */}
+      <ThreeOptionDialog
+        open={confirmDelete !== null && confirmDelete.count > 0}
+        onOpenChange={(open) => {
+          if (!open) setConfirmDelete(null);
+        }}
+        title={t("settings.folders.deleteTitle", "Delete folder?")}
+        description={
+          confirmDelete
+            ? t("settings.folders.deleteFilesPrompt", {
+                name: confirmDelete.name,
+                count: confirmDelete.count,
+                defaultValue:
+                  'Remove “{{name}}” and its {{count}} note(s) from the app. Keep the note files on disk, or delete them too?',
+              })
+            : ""
+        }
+        primaryText={t("settings.folders.keepFiles", "Keep files")}
+        secondaryText={t("settings.folders.deleteFiles", "Delete files too")}
+        onPrimary={() => {
+          if (confirmDelete) handleDelete(confirmDelete.id, false);
+        }}
+        onSecondary={() => {
+          if (confirmDelete) handleDelete(confirmDelete.id, true);
         }}
       />
     </div>

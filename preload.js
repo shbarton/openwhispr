@@ -100,7 +100,7 @@ contextBridge.exposeInMainWorld("electronAPI", {
   // Folder functions
   getFolders: () => ipcRenderer.invoke("db-get-folders"),
   createFolder: (name) => ipcRenderer.invoke("db-create-folder", name),
-  deleteFolder: (id) => ipcRenderer.invoke("db-delete-folder", id),
+  deleteFolder: (id, deleteFiles) => ipcRenderer.invoke("db-delete-folder", id, deleteFiles),
   renameFolder: (id, name) => ipcRenderer.invoke("db-rename-folder", id, name),
   getFolderNoteCounts: () => ipcRenderer.invoke("db-get-folder-note-counts"),
   getDefaultMeetingFolder: () => ipcRenderer.invoke("db-get-default-meeting-folder"),

@@ -1117,7 +1117,10 @@ class IPCHandlers {
       return result;
     });
 
-    ipcMain.handle("db-delete-folder", async (event, id) => {
+    // deleteFiles=true (default, preserves existing callers like the notes view)
+    // also removes the folder's mirrored .md files from disk; false removes the
+    // folder + notes from the app but leaves the files (e.g. in the user's vault).
+    ipcMain.handle("db-delete-folder", async (event, id, deleteFiles = true) => {
       const folder = this._noteFilesEnabled
         ? this.databaseManager.getFolders().find((f) => f.id === id)
         : null;
@@ -1130,17 +1133,19 @@ class IPCHandlers {
           this.broadcastToWindows("folder-deleted", { id });
           if (this._noteFilesEnabled && folder) {
             const markdownMirror = require("./markdownMirror");
-            const hasCustomPath = !!(folder.path && folder.path.trim());
-            // Remove only this folder's own note files (precise, by note id) so
-            // a custom path that overlaps another folder's directory can't wipe
-            // its files. Keep the deleted folder's dir registered for the globs.
-            this._refreshMirrorFolderDirs(folder);
-            for (const noteId of result.noteIds ?? []) {
-              markdownMirror.deleteNote(noteId);
+            if (deleteFiles) {
+              const hasCustomPath = !!(folder.path && folder.path.trim());
+              // Remove only this folder's own note files (precise, by note id) so
+              // a custom path that overlaps another folder's directory can't wipe
+              // its files. Keep the deleted folder's dir registered for the globs.
+              this._refreshMirrorFolderDirs(folder);
+              for (const noteId of result.noteIds ?? []) {
+                markdownMirror.deleteNote(noteId);
+              }
+              // Tidy the now-empty default dir we own; no-op for custom paths or
+              // dirs another folder shares (rmdir won't remove a non-empty dir).
+              if (!hasCustomPath) markdownMirror.removeFolderDirIfEmpty(folder.name);
             }
-            // Tidy the now-empty default dir we own; no-op for custom paths or
-            // dirs another folder shares (rmdir won't remove a non-empty dir).
-            if (!hasCustomPath) markdownMirror.removeFolderDirIfEmpty(folder.name);
             this._refreshMirrorFolderDirs();
           }
         });
