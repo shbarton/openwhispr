@@ -217,6 +217,7 @@ export function FolderLocationsPanel() {
     count: number;
   } | null>(null);
   const [newFolderName, setNewFolderName] = useState("");
+  const [newFolderPath, setNewFolderPath] = useState("");
   const [adding, setAdding] = useState(false);
   // True while a Move/Leave choice is in flight, so dialog dismissal (Escape/
   // overlay/Cancel) knows whether to revert the edited path field.
@@ -317,7 +318,14 @@ export function FolderLocationsPanel() {
     if (!name) return;
     const res = await window.electronAPI?.createFolder?.(name);
     if (res?.success) {
+      // Apply the chosen location to the brand-new folder (no files yet, so no
+      // move prompt needed).
+      const folderPath = newFolderPath.trim();
+      if (folderPath && res.folder?.id != null) {
+        await window.electronAPI?.setFolderPath?.(res.folder.id, folderPath, false);
+      }
       setNewFolderName("");
+      setNewFolderPath("");
       setAdding(false);
       await load();
     } else {
@@ -326,7 +334,22 @@ export function FolderLocationsPanel() {
         variant: "destructive",
       });
     }
-  }, [newFolderName, load, toast, t]);
+  }, [newFolderName, newFolderPath, load, toast, t]);
+
+  const cancelAdd = useCallback(() => {
+    setNewFolderName("");
+    setNewFolderPath("");
+    setAdding(false);
+  }, []);
+
+  const handleBrowseNew = useCallback(async () => {
+    const result = await window.electronAPI?.showOpenDialog?.({
+      properties: ["openDirectory"],
+      title: t("settings.folders.browseTitle", "Choose a folder location"),
+    });
+    const picked = result?.filePaths?.[0];
+    if (picked) setNewFolderPath(picked);
+  }, [t]);
 
   const handleRename = useCallback(
     async (folder: FolderItem, rawName: string) => {
@@ -509,14 +532,30 @@ export function FolderLocationsPanel() {
                 onChange={(e) => setNewFolderName(e.target.value)}
                 onKeyDown={(e) => {
                   if (e.key === "Enter") handleCreateFolder();
-                  if (e.key === "Escape") {
-                    setNewFolderName("");
-                    setAdding(false);
-                  }
+                  if (e.key === "Escape") cancelAdd();
                 }}
-                placeholder={t("settings.folders.addPlaceholder", "New folder name")}
-                className="h-8 text-xs flex-1"
+                placeholder={t("settings.folders.addPlaceholder", "Folder name")}
+                className="h-8 text-xs font-medium min-w-0 flex-1"
               />
+              <Input
+                value={newFolderPath}
+                onChange={(e) => setNewFolderPath(e.target.value)}
+                onKeyDown={(e) => {
+                  if (e.key === "Enter") handleCreateFolder();
+                  if (e.key === "Escape") cancelAdd();
+                }}
+                placeholder={t("settings.folders.placeholder", "Default location")}
+                className="h-8 text-xs min-w-0 flex-[2]"
+              />
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={handleBrowseNew}
+                className="h-8 px-2 shrink-0"
+                title={t("settings.folders.browse", "Browse")}
+              >
+                <FolderOpen size={14} />
+              </Button>
               <Button
                 variant="outline"
                 size="sm"
@@ -529,10 +568,7 @@ export function FolderLocationsPanel() {
               <Button
                 variant="ghost"
                 size="sm"
-                onClick={() => {
-                  setNewFolderName("");
-                  setAdding(false);
-                }}
+                onClick={cancelAdd}
                 className="h-8 px-2 shrink-0 text-muted-foreground"
                 title={t("common.cancel", "Cancel")}
               >
