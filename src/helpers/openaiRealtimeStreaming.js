@@ -6,6 +6,15 @@ const DISCONNECT_TIMEOUT_MS = 3000;
 const SAMPLE_RATE = 24000;
 const COLD_START_BUFFER_MAX = 3 * SAMPLE_RATE * 2; // 3 seconds of 16-bit PCM
 
+// GA Realtime transcription model. The legacy ids (gpt-4o-transcribe,
+// gpt-4o-mini-transcribe, whisper-1) are file/request transcription models and
+// are not natively streamable over the GA realtime socket, so any of them are
+// mapped onto the GA streaming model.
+const GA_STREAMING_MODEL = "gpt-realtime-whisper";
+const GA_STREAMING_MODELS = new Set([GA_STREAMING_MODEL]);
+const resolveGaModel = (model) =>
+  model && GA_STREAMING_MODELS.has(model) ? model : GA_STREAMING_MODEL;
+
 class OpenAIRealtimeStreaming {
   constructor() {
     this.ws = null;
@@ -22,7 +31,7 @@ class OpenAIRealtimeStreaming {
     this.connectionTimeout = null;
     this.isDisconnecting = false;
     this.audioBytesSent = 0;
-    this.model = "gpt-4o-mini-transcribe";
+    this.model = GA_STREAMING_MODEL;
     this.coldStartBuffer = [];
     this.coldStartBufferSize = 0;
     this.speechStartedAt = null;
@@ -42,7 +51,7 @@ class OpenAIRealtimeStreaming {
     }
 
     this.isConnecting = true;
-    this.model = model || "gpt-4o-mini-transcribe";
+    this.model = resolveGaModel(model);
     this.preconfigured = !!preconfigured;
     this.completedSegments = [];
     this.currentPartial = "";
@@ -51,7 +60,7 @@ class OpenAIRealtimeStreaming {
     this.coldStartBufferSize = 0;
     this.speechStartedAt = null;
 
-    const url = "wss://api.openai.com/v1/realtime?intent=transcription";
+    const url = `wss://api.openai.com/v1/realtime?model=${this.model}`;
     debugLogger.debug("OpenAI Realtime connecting", { model: this.model });
 
     return new Promise((resolve, reject) => {
@@ -67,7 +76,6 @@ class OpenAIRealtimeStreaming {
       this.ws = new WebSocket(url, {
         headers: {
           Authorization: `Bearer ${apiKey}`,
-          "OpenAI-Beta": "realtime=v1",
         },
       });
 
@@ -117,6 +125,7 @@ class OpenAIRealtimeStreaming {
       const event = JSON.parse(data.toString());
 
       switch (event.type) {
+        case "session.created":
         case "transcription_session.created": {
           if (this.preconfigured) {
             // Server-side ephemeral token already configured the session;
@@ -139,17 +148,21 @@ class OpenAIRealtimeStreaming {
             if (!this.ws || this.ws.readyState !== WebSocket.OPEN) break;
             this.ws.send(
               JSON.stringify({
-                type: "transcription_session.update",
+                type: "session.update",
                 session: {
-                  input_audio_format: "pcm16",
-                  input_audio_transcription: {
-                    model: this.model,
-                  },
-                  turn_detection: {
-                    type: "server_vad",
-                    threshold: 0.6,
-                    silence_duration_ms: 600,
-                    prefix_padding_ms: 500,
+                  type: "transcription",
+                  audio: {
+                    input: {
+                      format: { type: "audio/pcm", rate: SAMPLE_RATE },
+                      transcription: { model: this.model, delay: "low" },
+                      noise_reduction: { type: "near_field" },
+                      turn_detection: {
+                        type: "server_vad",
+                        threshold: 0.6,
+                        silence_duration_ms: 600,
+                        prefix_padding_ms: 500,
+                      },
+                    },
                   },
                 },
               })
@@ -158,6 +171,7 @@ class OpenAIRealtimeStreaming {
           break;
         }
 
+        case "session.updated":
         case "transcription_session.updated": {
           if (this.pendingResolve) {
             this.isConnected = true;

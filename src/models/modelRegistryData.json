@@ -139,18 +139,22 @@
       "baseUrl": "https://api.openai.com/v1",
       "models": [
         {
+          "id": "gpt-realtime-whisper",
+          "name": "GPT Realtime Whisper",
+          "description": "Live streaming transcription (Realtime GA)",
+          "streaming": true
+        },
+        {
           "id": "gpt-4o-mini-transcribe",
           "name": "GPT-4o Mini Transcribe",
           "description": "Fast and accurate transcription",
-          "descriptionKey": "models.descriptions.transcription.openai_gpt_4o_mini_transcribe",
-          "streaming": true
+          "descriptionKey": "models.descriptions.transcription.openai_gpt_4o_mini_transcribe"
         },
         {
           "id": "gpt-4o-transcribe",
           "name": "GPT-4o Transcribe",
           "description": "Most accurate transcription",
-          "descriptionKey": "models.descriptions.transcription.openai_gpt_4o_transcribe",
-          "streaming": true
+          "descriptionKey": "models.descriptions.transcription.openai_gpt_4o_transcribe"
         },
         {
           "id": "whisper-1",
