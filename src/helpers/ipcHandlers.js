@@ -498,7 +498,7 @@ class IPCHandlers {
     } catch (err) {
       debugLogger.error(
         "Failed to move folder mirror files",
-        { folderId, error: err.message },
+        { folderId: folder?.id, error: err.message },
         "note-files"
       );
     }

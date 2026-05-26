@@ -175,7 +175,9 @@ export default function MeetingSetupDialog({
   // Debounced contact search — keystrokes coalesce into one IPC call.
   // Participant exclusion is applied at render time so adding/removing a
   // participant doesn't re-fire the search.
-  const [rawContactResults, setRawContactResults] = useState<CalendarAttendee[]>([]);
+  const [rawContactResults, setRawContactResults] = useState<
+    Array<{ email: string; display_name: string | null }>
+  >([]);
   useEffect(() => {
     if (!participantsOpen) return;
     const query = participantSearch.trim();
