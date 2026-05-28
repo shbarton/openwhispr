@@ -14,6 +14,15 @@ const START_TIMEOUT_MS = 3000;
 const REQUEST_TIMEOUT_MS = 60000;
 const STOP_TIMEOUT_MS = 5000;
 
+// Window over which we expect at least one non-zero PCM sample once capture is
+// live. A Core Audio process tap created without an effective "System Audio
+// Recording" TCC grant is *still* created successfully (emits "start"), but the
+// OS feeds it hard-zero buffers forever instead of erroring — so the only way
+// to tell "granted" from "silently denied" is to look at the audio. A
+// genuinely quiet but *granted* tap still carries a non-zero noise floor, so an
+// all-exactly-zero stream over several seconds is the denial signature.
+const SILENT_CAPTURE_CHECK_MS = 4000;
+
 function compareVersions(left, right) {
   const leftParts = String(left)
     .split(".")
@@ -43,6 +52,7 @@ class AudioTapManager {
     this.isStopping = false;
     this.permissionStatus = this._loadPermissionStatus();
     this._requestPromise = null;
+    this._silenceWatchdog = null;
   }
 
   isSupported() {
@@ -145,6 +155,7 @@ class AudioTapManager {
     this.onError = onError || null;
     this.isStopping = false;
     this.stderrBuffer = "";
+    this._startSilenceWatchdog();
 
     const child = spawn(
       binaryPath,
@@ -179,6 +190,7 @@ class AudioTapManager {
         if (this.process !== child) {
           return;
         }
+        this._inspectChunkForSilence(chunk);
         this.onChunk?.(chunk);
       });
 
@@ -241,13 +253,75 @@ class AudioTapManager {
     });
   }
 
+  _startSilenceWatchdog() {
+    this._clearSilenceWatchdog();
+    const watchdog = { sawNonZero: false, timer: null, fired: false };
+    watchdog.timer = setTimeout(() => {
+      watchdog.timer = null;
+      if (watchdog.fired || watchdog.sawNonZero || this.isStopping || !this.process) {
+        return;
+      }
+      watchdog.fired = true;
+      // Tap is running but every sample has been exactly zero — the OS is
+      // silently denying capture (missing/invalid System Audio Recording
+      // grant). Correct the cached status and surface a real, actionable
+      // error instead of recording silence forever. Mic capture is unaffected,
+      // so we deliberately do NOT stop the tap — if audio starts flowing later
+      // it will still be captured.
+      this._persistPermissionStatus("denied");
+      this.onError?.(this._buildSilentCaptureError());
+    }, SILENT_CAPTURE_CHECK_MS);
+    if (typeof watchdog.timer.unref === "function") {
+      watchdog.timer.unref();
+    }
+    this._silenceWatchdog = watchdog;
+  }
+
+  _inspectChunkForSilence(chunk) {
+    const watchdog = this._silenceWatchdog;
+    if (!watchdog || watchdog.sawNonZero) {
+      return;
+    }
+    // A non-zero 16-bit sample has at least one non-zero byte, so a single
+    // non-zero byte anywhere means real audio reached us. Cheap and only runs
+    // until the first non-zero chunk is seen.
+    for (let index = 0; index < chunk.length; index += 1) {
+      if (chunk[index] !== 0) {
+        watchdog.sawNonZero = true;
+        if (this.permissionStatus !== "granted") {
+          this._persistPermissionStatus("granted");
+        }
+        return;
+      }
+    }
+  }
+
+  _clearSilenceWatchdog() {
+    if (this._silenceWatchdog?.timer) {
+      clearTimeout(this._silenceWatchdog.timer);
+    }
+    this._silenceWatchdog = null;
+  }
+
+  _buildSilentCaptureError() {
+    const error = new Error(
+      "System audio is being captured as silence — OpenWhispr doesn't have permission to record system audio. " +
+        "Enable it in System Settings → Privacy & Security → Screen & System Audio Recording, then restart the recording."
+    );
+    error.code = "silent_capture";
+    error.status = "denied";
+    return error;
+  }
+
   async stop() {
     if (!this.process) {
+      this._clearSilenceWatchdog();
       return;
     }
 
     const child = this.process;
     this.isStopping = true;
+    this._clearSilenceWatchdog();
 
     await new Promise((resolve) => {
       const timeout = setTimeout(() => {

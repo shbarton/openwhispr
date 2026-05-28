@@ -151,6 +151,31 @@ try {
   console.warn(`[audio-tap] Unable to set executable permissions: ${error.message}`);
 }
 
+// Dev-only code signing. Production builds sign this helper through
+// electron-builder (see scripts/afterPack.js → registerMacResourceBinariesForSigning),
+// but `npm run dev` runs it ad-hoc/linker-signed, which macOS TCC will not grant
+// System Audio Recording to — the tap is created but fed silence. To test system
+// audio capture in dev, set OW_DEV_SIGN_IDENTITY to an Apple-issued identity
+// (e.g. "Apple Development: you@example.com (TEAMID)") and sign the dev Electron
+// with the SAME identity so TCC can attribute the helper's capture to the app.
+// A self-signed identity does NOT work — TCC requires an Apple-anchored Team ID.
+const devSignIdentity = process.env.OW_DEV_SIGN_IDENTITY;
+if (devSignIdentity) {
+  const signResult = spawnSync(
+    "codesign",
+    ["--force", "--options", "runtime", "--sign", devSignIdentity, outputBinary],
+    { stdio: "inherit" }
+  );
+  if (signResult.status === 0) {
+    log(`Signed dev binary with identity "${devSignIdentity}".`);
+  } else {
+    console.warn(
+      `[audio-tap] Dev code signing with "${devSignIdentity}" failed (status ${signResult.status}). ` +
+        "System audio capture will be silently denied in dev until signed."
+    );
+  }
+}
+
 if (!verifyBinaryArch(outputBinary, targetArch)) {
   console.error(
     `[audio-tap] FATAL: Compiled binary architecture does not match target (${targetArch}).`
