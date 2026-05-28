@@ -38,11 +38,11 @@ export default function HistoryView({
   const filteredHistory = useMemo(() => {
     const query = trimmedQuery.toLowerCase();
     if (!query) return history;
-    return history.filter((item) => {
-      if (item.text?.toLowerCase().includes(query)) return true;
-      if (item.raw_text?.toLowerCase().includes(query)) return true;
-      return false;
-    });
+    return history.filter(
+      (item) =>
+        !!item.text?.toLowerCase().includes(query) ||
+        !!item.raw_text?.toLowerCase().includes(query),
+    );
   }, [history, trimmedQuery]);
 
   const groupedHistory = useMemo(() => {
@@ -107,7 +107,7 @@ export default function HistoryView({
                 className="absolute left-3 top-1/2 -translate-y-1/2 text-foreground-tertiary pointer-events-none"
               />
               <input
-                type="search"
+                type="text"
                 value={searchQuery}
                 onChange={(e) => setSearchQuery(e.target.value)}
                 placeholder={t("controlPanel.history.searchPlaceholder")}
