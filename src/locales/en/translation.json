@@ -282,6 +282,9 @@
       "dataRetentionDisabled": "Data retention is off. Transcriptions and audio are not saved to history.",
       "press": "Press",
       "toStart": "to start",
+      "searchPlaceholder": "Search transcripts",
+      "clearSearch": "Clear search",
+      "noMatches": "No transcripts match \"{{query}}\".",
       "dateGroups": {
         "today": "Today",
         "yesterday": "Yesterday"

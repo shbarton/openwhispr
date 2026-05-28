@@ -1,6 +1,6 @@
-import { useMemo } from "react";
+import { useMemo, useState } from "react";
 import { useTranslation } from "react-i18next";
-import { Loader2, Mic, Trash2 } from "lucide-react";
+import { Loader2, Mic, Search, Trash2, X } from "lucide-react";
 import TranscriptionItem from "./ui/TranscriptionItem";
 import type { TranscriptionItem as TranscriptionItemType } from "../types/electron";
 import { formatHotkeyLabel } from "../utils/hotkeys";
@@ -32,14 +32,26 @@ export default function HistoryView({
 }: HistoryViewProps) {
   const { t } = useTranslation();
   const dataRetentionEnabled = useSettingsStore((s) => s.dataRetentionEnabled);
+  const [searchQuery, setSearchQuery] = useState("");
+  const trimmedQuery = searchQuery.trim();
+
+  const filteredHistory = useMemo(() => {
+    const query = trimmedQuery.toLowerCase();
+    if (!query) return history;
+    return history.filter((item) => {
+      if (item.text?.toLowerCase().includes(query)) return true;
+      if (item.raw_text?.toLowerCase().includes(query)) return true;
+      return false;
+    });
+  }, [history, trimmedQuery]);
 
   const groupedHistory = useMemo(() => {
-    if (history.length === 0) return [];
+    if (filteredHistory.length === 0) return [];
 
     const groups: { label: string; items: TranscriptionItemType[] }[] = [];
     let currentLabel: string | null = null;
 
-    for (const item of history) {
+    for (const item of filteredHistory) {
       const label = formatDateGroup(item.timestamp, t);
 
       if (label !== currentLabel) {
@@ -51,7 +63,7 @@ export default function HistoryView({
     }
 
     return groups;
-  }, [history, t]);
+  }, [filteredHistory, t]);
 
   return (
     <div className="px-4 pt-4 pb-6">
@@ -88,7 +100,36 @@ export default function HistoryView({
           </div>
         ) : (
           <div className="group">
-            {groupedHistory.map((group, index) => (
+            <div className="relative mb-3">
+              <Search
+                size={14}
+                strokeWidth={1.5}
+                className="absolute left-3 top-1/2 -translate-y-1/2 text-foreground-tertiary pointer-events-none"
+              />
+              <input
+                type="search"
+                value={searchQuery}
+                onChange={(e) => setSearchQuery(e.target.value)}
+                placeholder={t("controlPanel.history.searchPlaceholder")}
+                className="w-full pl-9 pr-9 py-2 rounded-lg bg-surface-hover/50 border border-border-subtle text-sm text-foreground placeholder:text-foreground-tertiary focus:outline-none focus:ring-1 focus:ring-primary/40 focus:border-primary/40 transition"
+              />
+              {searchQuery && (
+                <button
+                  type="button"
+                  onClick={() => setSearchQuery("")}
+                  aria-label={t("controlPanel.history.clearSearch")}
+                  className="absolute right-2 top-1/2 -translate-y-1/2 p-1 rounded text-foreground-tertiary hover:text-foreground hover:bg-surface-hover transition"
+                >
+                  <X size={14} strokeWidth={1.5} />
+                </button>
+              )}
+            </div>
+            {groupedHistory.length === 0 ? (
+              <div className="py-12 text-center text-sm text-foreground-tertiary">
+                {t("controlPanel.history.noMatches", { query: trimmedQuery })}
+              </div>
+            ) : (
+              groupedHistory.map((group, index) => (
               <div key={group.label} className={index > 0 ? "mt-8" : ""}>
                 <div className="sticky -top-1 z-10 -mx-4 px-5 pt-3 pb-3 bg-background flex items-center justify-between">
                   <span
@@ -121,7 +162,8 @@ export default function HistoryView({
                   ))}
                 </div>
               </div>
-            ))}
+              ))
+            )}
           </div>
         )}
       </div>
