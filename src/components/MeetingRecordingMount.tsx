@@ -4,9 +4,11 @@ import {
   primeMeetingWorklet,
   useMeetingRecordingStore,
 } from "../stores/meetingRecordingStore";
+import type { MeetingSessionPatch } from "../types/meetingLifecycle";
 
 const EMA_PREV = 0.5;
 const EMA_NEXT = 0.5;
+const LIFECYCLE_PUBLISH_INTERVAL_MS = 200;
 
 export default function MeetingRecordingMount(): null {
   const isRecording = useMeetingRecordingStore((s) => s.isRecording);
@@ -21,6 +23,7 @@ export default function MeetingRecordingMount(): null {
     let rafId = 0;
     let smoothed = 0;
     let buf = new Float32Array(256);
+    let lastPublishAt = 0;
 
     const tick = () => {
       const analyser = getMicAnalyser();
@@ -38,6 +41,16 @@ export default function MeetingRecordingMount(): null {
         smoothed = EMA_PREV * smoothed + EMA_NEXT * rms;
         const clamped = smoothed < 0 ? 0 : smoothed > 1 ? 1 : smoothed;
         useMeetingRecordingStore.setState({ currentMicLevel: clamped });
+
+        const now = performance.now();
+        if (now - lastPublishAt >= LIFECYCLE_PUBLISH_INTERVAL_MS) {
+          lastPublishAt = now;
+          const patch: MeetingSessionPatch = { micLevel: clamped };
+          if (clamped > 0.005) {
+            patch.lastMicAudioAt = new Date().toISOString();
+          }
+          void window.electronAPI?.meetingSessionPublish?.(patch);
+        }
       }
       rafId = requestAnimationFrame(tick);
     };

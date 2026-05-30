@@ -610,6 +610,14 @@ contextBridge.exposeInMainWorld("electronAPI", {
     (callback) => (_event, data) => callback(data)
   ),
 
+  // Meeting recording lifecycle bus
+  meetingSessionPublish: (patch) => ipcRenderer.invoke("meeting-session-publish", patch),
+  meetingSessionGetSnapshot: () => ipcRenderer.invoke("meeting-session-get-snapshot"),
+  onMeetingSessionSnapshot: registerListener(
+    "meeting-session-snapshot",
+    (callback) => (_event, snapshot) => callback(snapshot)
+  ),
+
   // Dictation realtime streaming
   dictationRealtimeWarmup: (options) => ipcRenderer.invoke("dictation-realtime-warmup", options),
   dictationRealtimeStart: (options) => ipcRenderer.invoke("dictation-realtime-start", options),

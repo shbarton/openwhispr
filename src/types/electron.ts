@@ -1648,6 +1648,25 @@ declare global {
       ) => () => void;
       onMeetingTranscriptionError?: (callback: (error: string) => void) => () => void;
 
+      // Meeting recording lifecycle bus
+      meetingSessionPublish?: (
+        patch: import("./meetingLifecycle").MeetingSessionPatch
+      ) => Promise<{
+        success: boolean;
+        snapshot?: import("./meetingLifecycle").MeetingSessionSnapshot;
+        error?: string;
+      }>;
+      meetingSessionGetSnapshot?: () => Promise<{
+        success: boolean;
+        snapshot?: import("./meetingLifecycle").MeetingSessionSnapshot;
+        error?: string;
+      }>;
+      onMeetingSessionSnapshot?: (
+        callback: (
+          snapshot: import("./meetingLifecycle").MeetingSessionSnapshot
+        ) => void
+      ) => () => void;
+
       // Speaker diarization
       downloadDiarizationModels?: () => Promise<{ success: boolean; error?: string }>;
       getDiarizationModelStatus?: () => Promise<{

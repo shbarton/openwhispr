@@ -331,6 +331,7 @@ class IPCHandlers {
     this.whisperCudaManager = managers.whisperCudaManager;
     this.googleCalendarManager = managers.googleCalendarManager;
     this.meetingDetectionEngine = managers.meetingDetectionEngine;
+    this.meetingLifecycleManager = managers.meetingLifecycleManager;
     this.audioTapManager = managers.audioTapManager;
     this.linuxPortalAudioManager = managers.linuxPortalAudioManager;
     this.meetingAecManager = managers.meetingAecManager;
@@ -7702,6 +7703,25 @@ class IPCHandlers {
 
     ipcMain.handle("get-md5-hash", (_event, text) => {
       return crypto.createHash("md5").update(text.toLowerCase().trim()).digest("hex");
+    });
+
+    ipcMain.handle("meeting-session-publish", (_event, patch) => {
+      if (!this.meetingLifecycleManager) {
+        return { success: false, error: "lifecycle manager unavailable" };
+      }
+      try {
+        const snapshot = this.meetingLifecycleManager.applyPatch(patch);
+        return { success: true, snapshot };
+      } catch (error) {
+        return { success: false, error: error.message };
+      }
+    });
+
+    ipcMain.handle("meeting-session-get-snapshot", () => {
+      if (!this.meetingLifecycleManager) {
+        return { success: false, error: "lifecycle manager unavailable" };
+      }
+      return { success: true, snapshot: this.meetingLifecycleManager.getSnapshot() };
     });
 
     ipcMain.handle("meeting-detection-get-preferences", async () => {

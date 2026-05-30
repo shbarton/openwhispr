@@ -21,6 +21,13 @@ import {
   type TranscriptSpeakerLockSource,
   type TranscriptSpeakerStatus,
 } from "../utils/transcriptSpeakerState";
+import type { MeetingSessionPatch } from "../types/meetingLifecycle";
+
+let currentMeetingSessionId: string | null = null;
+
+function publishMeetingSession(patch: MeetingSessionPatch): void {
+  void window.electronAPI?.meetingSessionPublish?.(patch);
+}
 
 export interface TranscriptSegment {
   id: string;
@@ -480,6 +487,107 @@ function setSystemPartialSpeakerIdentity(speakerId: string | null, speakerName: 
   });
 }
 
+// --- Final-segment commit coalescing -------------------------------------
+// Final segments used to commit one Zustand setState (+ full transcript-string
+// rebuild) per segment. Over a long meeting that is O(n) per segment → O(n²),
+// saturating the renderer and pushing the transcript minutes behind real-time.
+// We now buffer finals (cheap per-segment compute stays immediate to preserve
+// arrival-order speaker bookkeeping) and commit them in a single setState per
+// animation frame. Partials stay immediate — they only touch a single field
+// and, with the virtualized list, re-render cheaply.
+let pendingFinalSegments: Array<{ seg: TranscriptSegment; source: "mic" | "system" }> = [];
+let pendingRetracts: Array<{ source: "mic" | "system"; timestamp?: number; text: string }> = [];
+let pendingClearSystemPartialIdentity = false;
+let segmentFlushHandle: ReturnType<typeof setTimeout> | number | null = null;
+let lastSegmentIpcLagMs: number | null = null;
+
+function scheduleSegmentFlush() {
+  if (segmentFlushHandle != null) return;
+  segmentFlushHandle =
+    typeof requestAnimationFrame === "function"
+      ? requestAnimationFrame(flushPendingSegments)
+      : setTimeout(flushPendingSegments, 16);
+}
+
+function cancelSegmentFlush() {
+  if (segmentFlushHandle == null) return;
+  if (typeof cancelAnimationFrame === "function") {
+    cancelAnimationFrame(segmentFlushHandle as number);
+  } else {
+    clearTimeout(segmentFlushHandle as ReturnType<typeof setTimeout>);
+  }
+  segmentFlushHandle = null;
+}
+
+function flushPendingSegments() {
+  segmentFlushHandle = null;
+  if (
+    pendingFinalSegments.length === 0 &&
+    pendingRetracts.length === 0 &&
+    !pendingClearSystemPartialIdentity
+  ) {
+    return;
+  }
+
+  const finals = pendingFinalSegments;
+  const retracts = pendingRetracts;
+  const clearSystemIdentity = pendingClearSystemPartialIdentity;
+  pendingFinalSegments = [];
+  pendingRetracts = [];
+  pendingClearSystemPartialIdentity = false;
+
+  let next = useMeetingRecordingStore.getState().segments;
+
+  if (retracts.length > 0) {
+    next = next.filter(
+      (seg) =>
+        !retracts.some(
+          (r) => r.source === seg.source && r.timestamp === seg.timestamp && r.text === seg.text
+        )
+    );
+  }
+
+  let clearMicPartial = false;
+  let clearSystemPartial = false;
+  for (const { seg, source } of finals) {
+    const ts = seg.timestamp ?? Infinity;
+    let i = next.length;
+    while (i > 0 && (next[i - 1].timestamp ?? 0) > ts) i--;
+    next = i === next.length ? [...next, seg] : [...next.slice(0, i), seg, ...next.slice(i)];
+    if (source === "mic") clearMicPartial = true;
+    else clearSystemPartial = true;
+  }
+
+  segmentsRefValue = next;
+
+  const patch: Partial<MeetingRecordingState> = {
+    segments: next,
+    transcript: buildTranscriptText(next),
+  };
+  if (clearMicPartial) patch.micPartial = "";
+  if (clearSystemPartial) patch.systemPartial = "";
+  if (clearSystemIdentity) {
+    systemPartialSpeakerIdValue = null;
+    patch.systemPartialSpeakerId = null;
+    patch.systemPartialSpeakerName = null;
+  }
+  useMeetingRecordingStore.setState(patch);
+
+  // [latency-probe] One coalesced commit per frame instead of one per final.
+  // If ipcLagMs still grows over a long meeting, the bottleneck is upstream of
+  // this commit (delivery), not the render path.
+  logger.info(
+    "Meeting segment flush",
+    {
+      batch: finals.length,
+      retracts: retracts.length,
+      ipcLagMs: lastSegmentIpcLagMs,
+      segmentCount: next.length,
+    },
+    "meeting"
+  );
+}
+
 function applySpeakerIdentification(
   segment: TranscriptSegment,
   identification: SpeakerIdentification
@@ -633,6 +741,10 @@ async function cleanup(): Promise<void> {
 
   ipcCleanups.forEach((fn) => fn());
   ipcCleanups = [];
+  // Commit any finals still buffered for the next frame, then stop the loop —
+  // otherwise the last utterances would be lost on stop.
+  cancelSegmentFlush();
+  flushPendingSegments();
   isPrepared = false;
   isRecordingFlag = false;
   isStartingFlag = false;
@@ -718,6 +830,11 @@ export async function startRecording(args: StartRecordingArgs): Promise<void> {
   recentSystemSpeaker = null;
   speakerLocks = locks;
   systemPartialSpeakerIdValue = null;
+  pendingFinalSegments = [];
+  pendingRetracts = [];
+  pendingClearSystemPartialIdentity = false;
+  lastSegmentIpcLagMs = null;
+  cancelSegmentFlush();
 
   useMeetingRecordingStore.setState({
     isRecording: true,
@@ -735,6 +852,18 @@ export async function startRecording(args: StartRecordingArgs): Promise<void> {
     systemPartialSpeakerId: null,
     systemPartialSpeakerName: null,
     diarizationSessionId: null,
+    error: null,
+  });
+
+  currentMeetingSessionId = crypto.randomUUID();
+  publishMeetingSession({
+    status: "recording",
+    sessionId: currentMeetingSessionId,
+    noteId: args.noteId,
+    folderId: args.folderId,
+    title: args.noteTitle,
+    startedAt: new Date().toISOString(),
+    stoppedAt: null,
     error: null,
   });
 
@@ -817,6 +946,12 @@ export async function startRecording(args: StartRecordingArgs): Promise<void> {
         isRecording: false,
         isTranscribing: false,
       });
+      publishMeetingSession({
+        status: "error",
+        error: startResult?.error || "Failed to start meeting transcription",
+        stoppedAt: new Date().toISOString(),
+      });
+      currentMeetingSessionId = null;
       stopMediaStream(micResult);
       stopMediaStream(systemCaptureResult.stream);
       isRecordingFlag = false;
@@ -867,21 +1002,12 @@ export async function startRecording(args: StartRecordingArgs): Promise<void> {
         emittedAt?: number;
       }) => {
         if (data.type === "retract") {
-          const next = useMeetingRecordingStore
-            .getState()
-            .segments.filter(
-              (seg) =>
-                !(
-                  seg.source === data.source &&
-                  seg.timestamp === data.timestamp &&
-                  seg.text === data.text
-                )
-            );
-          segmentsRefValue = next;
-          useMeetingRecordingStore.setState({
-            segments: next,
-            transcript: buildTranscriptText(next),
+          pendingRetracts.push({
+            source: data.source,
+            timestamp: data.timestamp,
+            text: data.text,
           });
+          scheduleSegmentFlush();
           return;
         }
 
@@ -894,13 +1020,15 @@ export async function startRecording(args: StartRecordingArgs): Promise<void> {
           return;
         }
 
-        // [latency-probe] Measure how far behind real-time this final segment
-        // is rendering and how much the per-segment handler work costs.
-        const handlerStart =
-          typeof performance !== "undefined" ? performance.now() : Date.now();
-        const ipcLagMs =
+        // [latency-probe] How far behind real-time this final arrived (main →
+        // renderer delivery). The heavy commit (array insert + transcript build
+        // + setState) is now deferred to the coalesced frame flush below.
+        lastSegmentIpcLagMs =
           typeof data.emittedAt === "number" ? Date.now() - data.emittedAt : null;
 
+        // Per-segment compute stays immediate: speaker-index reservation and
+        // placeholder assignment mutate module state and must run in arrival
+        // order. Only the store commit is batched.
         let rawSegment: TranscriptSegment = normalizeTranscriptSegment({
           id: `seg-${++segmentCounter}`,
           text: data.text,
@@ -924,37 +1052,16 @@ export async function startRecording(args: StartRecordingArgs): Promise<void> {
             })
           : provisional;
 
-        const prev = useMeetingRecordingStore.getState().segments;
-        const ts = seg.timestamp ?? Infinity;
-        let i = prev.length;
-        while (i > 0 && (prev[i - 1].timestamp ?? 0) > ts) i--;
-        const next =
-          i === prev.length ? [...prev, seg] : [...prev.slice(0, i), seg, ...prev.slice(i)];
-        segmentsRefValue = next;
+        pendingFinalSegments.push({ seg, source: data.source });
+        if (data.source === "system") {
+          pendingClearSystemPartialIdentity = true;
+        }
+        scheduleSegmentFlush();
 
-        const partialPatch = data.source === "mic" ? { micPartial: "" } : { systemPartial: "" };
-        useMeetingRecordingStore.setState({
-          segments: next,
-          transcript: buildTranscriptText(next),
-          ...partialPatch,
-        });
-
-        // [latency-probe] If ipcLagMs grows over the meeting, the renderer is
-        // falling behind real-time IPC segments (render-path saturation) — the
-        // likely cause of transcripts arriving minutes after the call. handlerMs
-        // and segmentCount show whether per-segment work scales with transcript
-        // size (buildTranscriptText rebuilds the whole transcript each segment).
-        const handlerMs =
-          (typeof performance !== "undefined" ? performance.now() : Date.now()) - handlerStart;
-        // Log every final so even a short test yields data (diagnostic).
-        logger.info(
-          "Meeting segment render timing",
-          {
-            ipcLagMs,
-            handlerMs: Number(handlerMs.toFixed(1)),
-            segmentCount: next.length,
-            seq: segmentCounter,
-          },
+        // Diagnostic kept lightweight; the coalesced commit logs the probe.
+        logger.debug(
+          "Meeting final segment queued",
+          { ipcLagMs: lastSegmentIpcLagMs, seq: segmentCounter },
           "meeting"
         );
 
@@ -966,9 +1073,9 @@ export async function startRecording(args: StartRecordingArgs): Promise<void> {
             seg.timestamp ?? Date.now()
           );
         }
-        if (data.source === "system") {
-          setSystemPartialSpeakerIdentity(null, null);
-        }
+        // The system-partial speaker identity is cleared in the coalesced flush
+        // (pendingClearSystemPartialIdentity) so it doesn't trigger an extra
+        // synchronous render per final.
       }
     );
     if (segmentCleanup) ipcCleanups.push(segmentCleanup);
@@ -1183,6 +1290,12 @@ export async function startRecording(args: StartRecordingArgs): Promise<void> {
       isRecording: false,
       isTranscribing: false,
     });
+    publishMeetingSession({
+      status: "error",
+      error: (err as Error).message,
+      stoppedAt: new Date().toISOString(),
+    });
+    currentMeetingSessionId = null;
     isRecordingFlag = false;
     isStartingFlag = false;
     await cleanup();
@@ -1201,6 +1314,7 @@ export async function stopRecording(): Promise<StopRecordingResult> {
   isRecordingFlag = false;
   isStartingFlag = false;
   useMeetingRecordingStore.setState({ isRecording: false, isTranscribing: false });
+  publishMeetingSession({ status: "stopping" });
 
   await cleanup();
 
@@ -1228,6 +1342,12 @@ export async function stopRecording(): Promise<StopRecordingResult> {
     systemPartialSpeakerName: null,
     currentMicLevel: 0,
   });
+
+  publishMeetingSession({
+    status: "idle",
+    stoppedAt: new Date().toISOString(),
+  });
+  currentMeetingSessionId = null;
 
   logger.info("Meeting transcription stopped", {}, "meeting");
   return { diarizationSessionId };

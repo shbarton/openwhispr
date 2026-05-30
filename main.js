@@ -261,6 +261,7 @@ const AudioTapManager = require("./src/helpers/audioTapManager");
 const LinuxPortalAudioManager = require("./src/helpers/linuxPortalAudioManager");
 const MeetingAecManager = require("./src/helpers/meetingAecManager");
 const MeetingDetectionEngine = require("./src/helpers/meetingDetectionEngine");
+const MeetingRecordingLifecycleManager = require("./src/helpers/meetingRecordingLifecycleManager");
 const { i18nMain, changeLanguage } = require("./src/helpers/i18nMain");
 const { ensureYdotool } = require("./src/helpers/ensureYdotool");
 const sidecarRegistry = require("./src/helpers/sidecarRegistry");
@@ -285,6 +286,7 @@ let textEditMonitor = null;
 let whisperCudaManager = null;
 let googleCalendarManager = null;
 let meetingDetectionEngine = null;
+let meetingLifecycleManager = null;
 let audioTapManager = null;
 let linuxPortalAudioManager = null;
 let meetingAecManager = null;
@@ -363,6 +365,8 @@ function initializeCoreManagers() {
     databaseManager
   );
   windowManager.meetingDetectionEngine = meetingDetectionEngine;
+  meetingLifecycleManager = new MeetingRecordingLifecycleManager();
+  windowManager.meetingLifecycleManager = meetingLifecycleManager;
   updateManager = new UpdateManager();
   updateManager.setWindowManager(windowManager);
   windowsKeyManager = new WindowsKeyManager();
@@ -389,6 +393,7 @@ function initializeCoreManagers() {
     whisperCudaManager,
     googleCalendarManager,
     meetingDetectionEngine,
+    meetingLifecycleManager,
     audioTapManager,
     linuxPortalAudioManager,
     meetingAecManager,
