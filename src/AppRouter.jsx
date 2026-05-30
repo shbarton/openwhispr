@@ -16,6 +16,9 @@ const AgentOverlay = React.lazy(() => import("./components/AgentOverlay.tsx"));
 const TranscriptionBarTestHarness = React.lazy(() =>
   import("./components/notes/TranscriptionBarTestHarness.tsx"),
 );
+const TranscriptPerfTestHarness = React.lazy(() =>
+  import("./components/notes/TranscriptPerfTestHarness.tsx"),
+);
 
 export default function AppRouter() {
   useTheme();
@@ -37,6 +40,14 @@ export default function AppRouter() {
     return (
       <Suspense fallback={<LoadingFallback />}>
         <TranscriptionBarTestHarness />
+      </Suspense>
+    );
+  }
+
+  if (params.includes("ui-test=transcript-perf")) {
+    return (
+      <Suspense fallback={<LoadingFallback />}>
+        <TranscriptPerfTestHarness />
       </Suspense>
     );
   }
