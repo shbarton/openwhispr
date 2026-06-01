@@ -10,6 +10,7 @@ const { convertToWav } = require("./ffmpegUtils");
 const { getSafeTempDir } = require("./safeTempDir");
 const { applyProvisionalSpeaker, applyConfirmedSpeaker } = require("./speakerAssignmentPolicy");
 const sidecarPidFile = require("./sidecarPidFile");
+const DeepgramStreaming = require("./deepgramStreaming");
 const {
   transcriptsOverlap,
   transcriptsLooselyOverlap,
@@ -431,6 +432,42 @@ class DiarizationManager {
     const keep = new Set(ranked.slice(0, cap).map(([sp]) => sp));
     const primary = ranked[0][0];
     return segments.map((s) => (keep.has(s.speaker) ? s : { ...s, speaker: primary }));
+  }
+
+  /**
+   * Diarize a meeting WAV, preferring Deepgram's native diarizer when a BYOK key
+   * is available and falling back to the local sherpa-onnx model on any failure,
+   * empty result, or missing key. Returns the local model's shape either way:
+   * `[{ start, end, speaker: "speaker_N" }]`.
+   *
+   * The speaker `cap` is applied only to LOCAL output — it encodes the local
+   * "you + N others" expectation and would re-merge speakers Deepgram correctly
+   * separated, so Deepgram's auto-detected result is returned uncapped.
+   */
+  async diarizeBest(wavPath, { numSpeakers, cap, deepgramKey } = {}) {
+    if (deepgramKey) {
+      try {
+        const dgSegments = await DeepgramStreaming.diarizeFileWithDeepgram(wavPath, deepgramKey);
+        if (dgSegments && dgSegments.length > 0) {
+          debugLogger.info("Diarization via Deepgram batch", {
+            segments: dgSegments.length,
+            speakers: new Set(dgSegments.map((s) => s.speaker)).size,
+          });
+          return dgSegments;
+        }
+        debugLogger.warn("Deepgram batch diarization returned no segments; using local model");
+      } catch (error) {
+        debugLogger.warn("Deepgram batch diarization failed; using local model", {
+          error: error.message,
+        });
+      }
+    }
+
+    let segments = await this.diarize(wavPath, numSpeakers > 0 ? { numSpeakers } : {});
+    if (cap != null) {
+      segments = this.capSpeakerClusters(segments, cap);
+    }
+    return segments;
   }
 
   mergeWithTranscript(transcriptSegments, diarizationSegments) {

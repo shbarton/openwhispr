@@ -536,16 +536,20 @@ function flushPendingSegments() {
   pendingRetracts = [];
   pendingClearSystemPartialIdentity = false;
 
-  let next = useMeetingRecordingStore.getState().segments;
-
-  if (retracts.length > 0) {
-    next = next.filter(
-      (seg) =>
-        !retracts.some(
-          (r) => r.source === seg.source && r.timestamp === seg.timestamp && r.text === seg.text
+  const current = useMeetingRecordingStore.getState().segments;
+  // One fresh array per flush (never mutate store state in place), then
+  // splice/push each buffered final into it — O(n + batch) instead of a full
+  // array copy per buffered segment.
+  const next =
+    retracts.length > 0
+      ? current.filter(
+          (seg) =>
+            !retracts.some(
+              (r) =>
+                r.source === seg.source && r.timestamp === seg.timestamp && r.text === seg.text
+            )
         )
-    );
-  }
+      : current.slice();
 
   let clearMicPartial = false;
   let clearSystemPartial = false;
@@ -553,7 +557,8 @@ function flushPendingSegments() {
     const ts = seg.timestamp ?? Infinity;
     let i = next.length;
     while (i > 0 && (next[i - 1].timestamp ?? 0) > ts) i--;
-    next = i === next.length ? [...next, seg] : [...next.slice(0, i), seg, ...next.slice(i)];
+    if (i === next.length) next.push(seg);
+    else next.splice(i, 0, seg);
     if (source === "mic") clearMicPartial = true;
     else clearSystemPartial = true;
   }

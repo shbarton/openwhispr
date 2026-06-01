@@ -32,7 +32,6 @@ function makeSegment(i: number): TranscriptSegment {
     source: isSystem ? "system" : "mic",
     timestamp: BASE_TS + i * 1000,
     speaker: isSystem ? `speaker_${i % 3}` : undefined,
-    speakerName: isSystem ? undefined : undefined,
   };
 }
 
@@ -45,8 +44,6 @@ export default function TranscriptPerfTestHarness() {
   const [virtualized, setVirtualized] = useState(true);
   const [streaming, setStreaming] = useState(false);
   const [fps, setFps] = useState(0);
-
-  const streamRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
   // FPS meter — drops visibly if the main thread is blocked by rendering.
   useEffect(() => {
@@ -67,20 +64,13 @@ export default function TranscriptPerfTestHarness() {
   }, []);
 
   useEffect(() => {
-    if (!streaming) {
-      if (streamRef.current) clearInterval(streamRef.current);
-      streamRef.current = null;
-      return;
-    }
+    if (!streaming) return;
     // Append 3 finals every 100ms — ~30 segments/sec, faster than a real call,
     // a deliberately harsh sustained load.
-    streamRef.current = setInterval(() => {
+    const id = setInterval(() => {
       setSegments((prev) => [...prev, ...makeRange(prev.length, 3)]);
     }, 100);
-    return () => {
-      if (streamRef.current) clearInterval(streamRef.current);
-      streamRef.current = null;
-    };
+    return () => clearInterval(id);
   }, [streaming]);
 
   const load = (n: number) => {
