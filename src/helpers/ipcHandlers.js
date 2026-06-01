@@ -8374,11 +8374,49 @@ class IPCHandlers {
           noteId,
           observedSpeakerIds,
         });
-        let diarizationSegments = await this.diarizationManager.diarize(
-          tmpWav,
-          numSpeakers > 0 ? { numSpeakers } : {}
-        );
-        if (cap != null) {
+        // Prefer Deepgram's native diarization for the canonical transcript — it
+        // separates multi-speaker single-channel audio (e.g. a 2-person video on
+        // system audio) that the local model under-clusters. Returns the same
+        // { start, end, speaker } shape, so mergeWithTranscript + the existing
+        // embedding-based name reconciliation downstream are unchanged. Falls
+        // back to the local sherpa-onnx model on any failure or with no key.
+        let diarizationSegments = null;
+        let usedDeepgramDiarization = false;
+        const deepgramDiarizeKey = this.environmentManager?.getDeepgramKey?.();
+        if (deepgramDiarizeKey) {
+          try {
+            const dgSegments = await DeepgramStreaming.diarizeFileWithDeepgram(
+              tmpWav,
+              deepgramDiarizeKey
+            );
+            if (dgSegments && dgSegments.length > 0) {
+              diarizationSegments = dgSegments;
+              usedDeepgramDiarization = true;
+              debugLogger.info("Diarization via Deepgram batch", {
+                segments: dgSegments.length,
+                speakers: new Set(dgSegments.map((s) => s.speaker)).size,
+              });
+            } else {
+              debugLogger.warn(
+                "Deepgram batch diarization returned no segments; using local model"
+              );
+            }
+          } catch (error) {
+            debugLogger.warn("Deepgram batch diarization failed; using local model", {
+              error: error.message,
+            });
+          }
+        }
+        if (!diarizationSegments) {
+          diarizationSegments = await this.diarizationManager.diarize(
+            tmpWav,
+            numSpeakers > 0 ? { numSpeakers } : {}
+          );
+        }
+        // The speaker cap encodes the local "you + N others" expectation, which
+        // is wrong for system-audio captures and would re-merge speakers Deepgram
+        // correctly separated. Only cap the local model's output.
+        if (cap != null && !usedDeepgramDiarization) {
           diarizationSegments = this.diarizationManager.capSpeakerClusters(
             diarizationSegments,
             cap

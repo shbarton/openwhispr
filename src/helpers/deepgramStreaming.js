@@ -892,4 +892,88 @@ class DeepgramStreaming {
   }
 }
 
+/**
+ * Diarize a finished WAV file with Deepgram's pre-recorded API (BYOK).
+ *
+ * Used for the canonical post-meeting transcript: Deepgram's native speaker
+ * separation is markedly better than the local model for multi-speaker
+ * single-channel audio (e.g. system audio of a 2-person video). Returns the
+ * SAME shape the local sherpa-onnx diarizer returns —
+ * `[{ start, end, speaker: "speaker_N" }]` — so it drops straight into
+ * `diarization.js#mergeWithTranscript` and the existing embedding-based name
+ * reconciliation downstream. Callers fall back to the local diarizer on throw.
+ *
+ * @param {string} wavPath  Path to a WAV file on disk.
+ * @param {string} apiKey   Deepgram BYOK API key (long-lived `Token`).
+ * @param {{ model?: string, timeoutMs?: number }} [opts]
+ * @returns {Promise<Array<{ start: number, end: number, speaker: string }>>}
+ */
+async function diarizeFileWithDeepgram(wavPath, apiKey, opts = {}) {
+  const { model = "nova-3", timeoutMs = 120000 } = opts;
+  if (!apiKey) throw new Error("No Deepgram API key");
+  const fs = require("fs/promises");
+  const audio = await fs.readFile(wavPath);
+
+  // diarize_model=latest selects Deepgram's newer (v2) pre-recorded diarizer,
+  // which separates speakers markedly better than the legacy diarize=true (v1).
+  // We only need per-word speaker time-ranges (text comes from the live
+  // transcript). WAV header carries the sample rate — no need to set it.
+  const params = new URLSearchParams({ model, diarize_model: "latest" });
+  const url = `https://api.deepgram.com/v1/listen?${params.toString()}`;
+
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), timeoutMs);
+  let response;
+  try {
+    response = await fetch(url, {
+      method: "POST",
+      headers: { Authorization: `Token ${apiKey}`, "Content-Type": "audio/wav" },
+      body: audio,
+      signal: controller.signal,
+    });
+  } finally {
+    clearTimeout(timer);
+  }
+
+  if (!response.ok) {
+    const body = await response.text().catch(() => "");
+    throw new Error(`Deepgram batch diarization ${response.status}: ${body.slice(0, 200)}`);
+  }
+
+  const json = await response.json();
+  const words = json?.results?.channels?.[0]?.alternatives?.[0]?.words || [];
+
+  // Diagnostic: surface the RAW truth so we can tell genuine 1-speaker audio
+  // apart from a missing/undefined speaker field (parse issue) or a weak model.
+  const rawSpeakers = [...new Set(words.map((w) => w.speaker))];
+  const audioDurationSec =
+    json?.metadata?.duration ?? (words.length ? words[words.length - 1].end : 0);
+  debugLogger.info("Deepgram batch diarization raw", {
+    words: words.length,
+    distinctRawSpeakers: rawSpeakers,
+    speakerFieldPresent: words.length > 0 && words[0].speaker !== undefined,
+    audioDurationSec,
+    model: json?.metadata?.models,
+  });
+
+  if (words.length === 0) return [];
+
+  // Collapse contiguous same-speaker words into segments.
+  const segments = [];
+  let current = null;
+  for (const word of words) {
+    const speaker = `speaker_${word.speaker ?? 0}`;
+    if (current && current.speaker === speaker) {
+      current.end = word.end;
+    } else {
+      if (current) segments.push(current);
+      current = { start: word.start, end: word.end, speaker };
+    }
+  }
+  if (current) segments.push(current);
+  return segments;
+}
+
+DeepgramStreaming.diarizeFileWithDeepgram = diarizeFileWithDeepgram;
+
 module.exports = DeepgramStreaming;
