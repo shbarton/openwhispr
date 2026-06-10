@@ -75,6 +75,8 @@ class DeepgramStreaming {
     this.isConnected = false;
     this.onPartialTranscript = null;
     this.onFinalTranscript = null;
+    this.onUtteranceEnd = null;
+    this.onSpeechStarted = null;
     this.onError = null;
     this.onSessionEnd = null;
     this.pendingResolve = null;
@@ -147,6 +149,12 @@ class DeepgramStreaming {
     });
     if (lang) {
       params.set("language", lang);
+    }
+    if (options.utteranceEndMs) {
+      params.set("utterance_end_ms", String(options.utteranceEndMs));
+    }
+    if (options.vadEvents) {
+      params.set("vad_events", "true");
     }
     if (Array.isArray(options.keyterms)) {
       // Nova-3 uses "keyterm", Nova-2 uses "keywords"
@@ -717,10 +725,12 @@ class DeepgramStreaming {
 
         case "UtteranceEnd":
           debugLogger.debug("Deepgram utterance end");
+          this.onUtteranceEnd?.(message);
           break;
 
         case "SpeechStarted":
           debugLogger.debug("Deepgram speech started");
+          this.onSpeechStarted?.(message);
           break;
 
         case "Error":

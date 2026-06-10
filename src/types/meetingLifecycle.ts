@@ -21,6 +21,7 @@ export interface MeetingSessionSnapshot {
   lastMicAudioAt: string | null;
   lastSystemAudioAt: string | null;
   lastTranscriptSegmentAt: string | null;
+  lastUtteranceEndAt: string | null;
   dictationActive: boolean;
   hudVisible: boolean;
   endDetectionSuppressed: boolean;

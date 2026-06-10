@@ -18,6 +18,7 @@ const IDLE_SNAPSHOT = Object.freeze({
   lastMicAudioAt: null,
   lastSystemAudioAt: null,
   lastTranscriptSegmentAt: null,
+  lastUtteranceEndAt: null,
   dictationActive: false,
   hudVisible: false,
   endDetectionSuppressed: false,
@@ -99,6 +100,7 @@ class MeetingRecordingLifecycleManager {
       next.lastMicAudioAt = null;
       next.lastSystemAudioAt = null;
       next.lastTranscriptSegmentAt = null;
+      next.lastUtteranceEndAt = null;
       next.hudVisible = false;
       next.endDetectionSuppressed = false;
       next.wrapPromptVisible = false;

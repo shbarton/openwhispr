@@ -4279,6 +4279,23 @@ class IPCHandlers {
       streaming.onError = (error) => {
         send("meeting-transcription-error", error.message);
       };
+      // Deepgram VAD/utterance events feed the meeting lifecycle bus for
+      // end-detection. Only fire when the lifecycle manager is active —
+      // dictation/other-provider flows pass through unchanged.
+      streaming.onSpeechStarted = () => {
+        if (source !== "mic") return;
+        this.meetingLifecycleManager?.applyPatch({
+          lastMicAudioAt: new Date().toISOString(),
+        });
+      };
+      streaming.onUtteranceEnd = () => {
+        const stamp = new Date().toISOString();
+        this.meetingLifecycleManager?.applyPatch(
+          source === "mic"
+            ? { lastUtteranceEndAt: stamp, lastMicAudioAt: stamp }
+            : { lastUtteranceEndAt: stamp, lastSystemAudioAt: stamp }
+        );
+      };
     };
 
     const fetchRealtimeToken = async (event, options, { streams } = {}) => {
@@ -4438,6 +4455,12 @@ class IPCHandlers {
         // Deepgram/AssemblyAI default to 16 kHz when this is omitted; OpenAI ignores it.
         sampleRate: MEETING_SAMPLE_RATE,
       };
+      // Deepgram-only: server-side silence + speech-start events feed the
+      // meeting lifecycle bus for end-detection. Other providers ignore.
+      if (options.provider === "deepgram-realtime") {
+        connectOpts.utteranceEndMs = 3000;
+        connectOpts.vadEvents = true;
+      }
       const { mode: systemAudioMode } = await getMeetingSystemAudioPlan();
       let pairs;
       if (systemAudioMode !== "unsupported") {
