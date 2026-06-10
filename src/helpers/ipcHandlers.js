@@ -7328,6 +7328,14 @@ class IPCHandlers {
       return { ok: true, apiKey: null };
     };
 
+    // Dictation: hold full stops back through natural mid-sentence pauses.
+    // Deepgram's default endpointing is 10 ms (finalizes a sentence on the
+    // slightest gap). 800 ms lets a phrase breathe before it commits a period,
+    // so dictation reads as flowing sentences instead of choppy fragments.
+    // Tune here; higher = fewer premature full stops but a slightly longer wait
+    // for the trailing segment to finalize. Interim text still streams live.
+    const DICTATION_ENDPOINTING_MS = 800;
+
     ipcMain.handle("deepgram-streaming-warmup", async (event, options = {}) => {
       try {
         const byok = options.byok === true;
@@ -7367,7 +7375,12 @@ class IPCHandlers {
 
         // Dictation captures at 16 kHz (audioManager AudioContext). State it
         // explicitly so this doesn't silently break if the capture rate changes.
-        await this.deepgramStreaming.warmup({ sampleRate: 16000, ...options, token });
+        await this.deepgramStreaming.warmup({
+          sampleRate: 16000,
+          endpointing: DICTATION_ENDPOINTING_MS,
+          ...options,
+          token,
+        });
         debugLogger.debug("Deepgram connection warmed up", {}, "streaming");
 
         return { success: true };
@@ -7465,7 +7478,12 @@ class IPCHandlers {
         };
 
         sendDropCount = 0;
-        await this.deepgramStreaming.connect({ sampleRate: 16000, ...options, token });
+        await this.deepgramStreaming.connect({
+          sampleRate: 16000,
+          endpointing: DICTATION_ENDPOINTING_MS,
+          ...options,
+          token,
+        });
         debugLogger.debug(
           "Deepgram streaming started",
           {

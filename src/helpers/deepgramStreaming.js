@@ -156,6 +156,13 @@ class DeepgramStreaming {
     if (options.vadEvents) {
       params.set("vad_events", "true");
     }
+    // Silence (ms) before Deepgram finalizes a chunk and commits a full stop.
+    // Default (10 ms) finalizes on the tiniest mid-sentence pause, which breaks
+    // dictation into too many short sentences. Callers raise this to ride
+    // through natural pauses and keep sentences together.
+    if (options.endpointing != null) {
+      params.set("endpointing", String(options.endpointing));
+    }
     if (Array.isArray(options.keyterms)) {
       // Nova-3 uses "keyterm", Nova-2 uses "keywords"
       const paramName = useNova3 ? "keyterm" : "keywords";
