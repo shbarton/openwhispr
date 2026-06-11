@@ -41,7 +41,6 @@ class WindowManager {
     // bottom-center default; overridden by the user setting via the
     // _panelStartPosition mutators.
     this._panelStartPosition = "center";
-    this._isDictatingToggle = false;
 
     app.on("before-quit", () => {
       this.isQuitting = true;
@@ -444,9 +443,10 @@ class WindowManager {
     }
     if (this.mainWindow && !this.mainWindow.isDestroyed()) {
       this.showDictationPanel();
+      // Dictation gate state is driven by renderer truth via the
+      // "dictation-activity-changed" IPC (useAudioRecording onStateChange) —
+      // do not flip it here.
       this.mainWindow.webContents.send("toggle-dictation");
-      this._isDictatingToggle = !this._isDictatingToggle;
-      this.meetingDetectionEngine?.setUserRecording(this._isDictatingToggle);
     }
   }
 
@@ -457,7 +457,6 @@ class WindowManager {
     if (this.mainWindow && !this.mainWindow.isDestroyed()) {
       this.showDictationPanel();
       this.mainWindow.webContents.send("start-dictation");
-      this.meetingDetectionEngine?.setUserRecording(true);
     }
   }
 
@@ -467,8 +466,6 @@ class WindowManager {
     }
     if (this.mainWindow && !this.mainWindow.isDestroyed()) {
       this.mainWindow.webContents.send("stop-dictation");
-      this._isDictatingToggle = false;
-      this.meetingDetectionEngine?.setUserRecording(false);
     }
   }
 

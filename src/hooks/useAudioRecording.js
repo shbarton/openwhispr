@@ -70,7 +70,8 @@ export const useAudioRecording = (toast, options = {}) => {
       const currentState = audioManagerRef.current.getState();
       if (!currentState.isRecording && !currentState.isStreamingStartInProgress) return false;
 
-      window.electronAPI?.unregisterCancelHotkey?.();
+      // Escape stays registered through the processing phase so it can reach
+      // cancelProcessing; onStateChange unregisters it once we're fully idle.
 
       if (currentState.isStreaming || currentState.isStreamingStartInProgress) {
         void playStopCue();
@@ -94,7 +95,15 @@ export const useAudioRecording = (toast, options = {}) => {
 
     audioManagerRef.current.setCallbacks({
       onStateChange: ({ isRecording, isProcessing, isStreaming }) => {
-        if (!isRecording) window.electronAPI?.unregisterCancelHotkey?.();
+        // Renderer truth for the main-process dictation gate (meeting
+        // detection engine + lifecycle bus). Every start/stop path converges
+        // here — hotkey, Escape cancel, bar Stop, auto-stop, provider errors —
+        // for all providers. Idempotent: repeated same-value sends are no-ops
+        // on the main side.
+        window.electronAPI?.dictationActivityChanged?.(isRecording);
+        // Release the global Escape grab only at full idle — it must survive
+        // the transcribing phase so Escape can cancel a slow/hung pipeline.
+        if (!isRecording && !isProcessing) window.electronAPI?.unregisterCancelHotkey?.();
         setIsRecording(isRecording);
         setIsProcessing(isProcessing);
         setIsStreaming(isStreaming ?? false);
@@ -282,12 +291,18 @@ export const useAudioRecording = (toast, options = {}) => {
     return false;
   }, []);
 
-  const cancelProcessing = () => {
+  const cancelProcessing = useCallback(() => {
     if (audioManagerRef.current) {
-      return audioManagerRef.current.cancelProcessing();
+      const didCancel = audioManagerRef.current.cancelProcessing();
+      // The discarded pipeline never reaches onTranscriptionComplete, so
+      // resume media here — same balancing cancelRecording does above.
+      if (didCancel && getSettings().pauseMediaOnDictation) {
+        window.electronAPI?.resumeMediaPlayback?.();
+      }
+      return didCancel;
     }
     return false;
-  };
+  }, []);
 
   const toggleListening = async () => {
     if (!isRecording && !isProcessing) {

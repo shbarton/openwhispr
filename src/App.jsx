@@ -7,7 +7,10 @@ import { formatHotkeyLabel } from "./utils/hotkeys";
 import { useWindowDrag } from "./hooks/useWindowDrag";
 import { useAudioRecording } from "./hooks/useAudioRecording";
 import { useSettingsStore } from "./stores/settingsStore";
-import { TranscriptionBarView } from "./components/notes/TranscriptionBarView";
+import {
+  TranscriptionBarView,
+  SLOW_TRANSCRIPTION_THRESHOLD_MS,
+} from "./components/notes/TranscriptionBarView";
 
 // Drag threshold in px — below this, mousedown→mouseup is treated as a click
 // and the bar action fires; above it, it's treated as a window drag and the
@@ -204,17 +207,25 @@ export default function App() {
   }, []);
 
   const isRecordingRef = useRef(isRecording);
+  const isProcessingRef = useRef(isProcessing);
 
   useLayoutEffect(() => {
     isRecordingRef.current = isRecording;
   }, [isRecording]);
 
+  useLayoutEffect(() => {
+    isProcessingRef.current = isProcessing;
+  }, [isProcessing]);
+
   useEffect(() => {
     const unsubscribe = window.electronAPI?.onCancelHotkeyPressed?.(() => {
+      // State-aware like the in-window Escape handler below: while recording
+      // cancel the take; while transcribing cancel the processing pipeline.
       if (isRecordingRef.current) cancelRecording();
+      else if (isProcessingRef.current) cancelProcessing();
     });
     return () => unsubscribe?.();
-  }, [cancelRecording]);
+  }, [cancelRecording, cancelProcessing]);
 
   // Auto-hide the floating icon when idle (setting enabled or dictation cycle completed)
   useEffect(() => {
@@ -300,6 +311,19 @@ export default function App() {
   }, []);
 
   const barState = isRecording ? "recording" : isProcessing ? "transcribing" : "idle";
+
+  // Surface the slow-transcription affordance (message + cancel button in
+  // the View) once transcribing has dragged on past the shared threshold;
+  // reset whenever the bar leaves the transcribing state.
+  const [showSlowMessage, setShowSlowMessage] = useState(false);
+  useEffect(() => {
+    if (barState !== "transcribing") {
+      setShowSlowMessage(false);
+      return;
+    }
+    const slowTimer = setTimeout(() => setShowSlowMessage(true), SLOW_TRANSCRIPTION_THRESHOLD_MS);
+    return () => clearTimeout(slowTimer);
+  }, [barState]);
 
   // Drive animationTime + level republishing only while the bar is visible
   // as recording/transcribing. The idle bar uses neither, so running the
@@ -417,7 +441,7 @@ export default function App() {
           levels={levels}
           animationTime={animationTime}
           errorMessage={null}
-          showSlowMessage={false}
+          showSlowMessage={showSlowMessage}
           onStartRecording={handleToggle}
           onStop={handleToggle}
           onCancel={handleCancel}

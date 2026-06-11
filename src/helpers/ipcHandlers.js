@@ -5748,6 +5748,18 @@ class IPCHandlers {
       return { success: true, text: result.text || "" };
     });
 
+    // Renderer-truth dictation state. useAudioRecording's onStateChange
+    // reports actual recording transitions for every provider and every stop
+    // path (hotkey toggle, Escape cancel, bar Stop, auto-stop, provider
+    // errors) — unlike the realtime handlers above, which only cover the
+    // OpenAI realtime provider. Idempotent: same-value sends are no-ops, so
+    // the overlap with the handlers above is harmless.
+    ipcMain.on("dictation-activity-changed", (_event, active) => {
+      const isActive = active === true;
+      this.meetingDetectionEngine?.setDictationActive(isActive);
+      this.meetingLifecycleManager?.applyPatch({ dictationActive: isActive });
+    });
+
     ipcMain.handle("start-dictation-preview", async (_event, { provider, model, language }) => {
       resetDictationPreviewState();
       dictationPreviewMode = true;
@@ -7571,6 +7583,40 @@ class IPCHandlers {
         return { isConnected: false, sessionId: null };
       }
       return this.deepgramStreaming.getStatus();
+    });
+
+    // BYOK batch fallback for dictation: when a Deepgram BYOK streaming take
+    // yields no text, the renderer posts the fallback WebM here instead of
+    // OpenWhispr Cloud. Auth uses the same BYOK resolution as
+    // configureDeepgramAuth (the user's own key from environmentManager).
+    ipcMain.handle("deepgram-transcribe-file", async (_event, audioBuffer, options = {}) => {
+      try {
+        const apiKey = this.environmentManager.getDeepgramKey();
+        if (!apiKey) {
+          return { success: false, error: "Deepgram API key not configured", code: "NO_API_KEY" };
+        }
+
+        const params = new URLSearchParams({
+          model: "nova-3",
+          smart_format: "true",
+          punctuate: "true",
+        });
+        if (options.language) {
+          params.set("language", options.language);
+        }
+
+        const data = await DeepgramStreaming.postToDeepgramListen(Buffer.from(audioBuffer), {
+          params,
+          contentType: options.mimeType || "audio/webm",
+          apiKey,
+          errorLabel: "Deepgram batch transcription",
+        });
+        const transcript = data?.results?.channels?.[0]?.alternatives?.[0]?.transcript || "";
+        return { success: true, text: transcript };
+      } catch (error) {
+        debugLogger.error("Deepgram batch transcription error", { error: error.message });
+        return { success: false, error: error.message };
+      }
     });
 
     // Agent mode handlers

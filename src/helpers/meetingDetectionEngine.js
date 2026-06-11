@@ -18,7 +18,13 @@ class MeetingDetectionEngine {
     this.databaseManager = databaseManager;
     this.activeDetections = new Map();
     this.preferences = { processDetection: true, audioDetection: true };
-    this._userRecording = false;
+    // Two distinct gate sources: meeting recording (set via setUserRecording
+    // from the meeting-transcription IPC handlers) and dictation (set via
+    // setDictationActive from renderer-truth state). The effective gate is
+    // either being active — keeping them separate prevents one source's stop
+    // from clearing the other's gate (last-writer-wins bug).
+    this._meetingRecordingActive = false;
+    this._dictationActive = false;
     this._meetingModeActive = false;
     this._notificationQueue = [];
     this._postRecordingCooldown = null;
@@ -79,9 +85,17 @@ class MeetingDetectionEngine {
       }
     }
 
-    if (this._userRecording || this._postRecordingCooldown) {
+    if (this._isGateActive() || this._postRecordingCooldown) {
       debugLogger.info("Detection queued — user is recording", { detectionId, source }, "meeting");
-      this._notificationQueue.push({ source, key, data });
+      // Tag detections that arrive while dictation is active: the audio
+      // evidence is (or includes) the dictation itself, so they must be
+      // dropped on flush instead of shown as a late "Meeting Detected" toast.
+      this._notificationQueue.push({
+        source,
+        key,
+        data,
+        duringDictation: this._dictationActive,
+      });
       this.activeDetections.set(detectionId, { source, key, data, dismissed: false });
       return;
     }
@@ -361,6 +375,26 @@ class MeetingDetectionEngine {
       return;
     }
 
+    // Drop detections queued while dictation was active: their audio evidence
+    // was the dictation session itself, not a meeting. Clear their
+    // activeDetections entries so a real meeting can re-trigger later.
+    const tainted = this._notificationQueue.filter((item) => item.duringDictation);
+    if (tainted.length > 0) {
+      for (const item of tainted) {
+        this.activeDetections.delete(`${item.source}:${item.key}`);
+      }
+      this._notificationQueue = this._notificationQueue.filter((item) => !item.duringDictation);
+      debugLogger.info(
+        "Dropped dictation-tainted queued detections",
+        { dropped: tainted.length, remaining: this._notificationQueue.length },
+        "meeting"
+      );
+      // Let the audio detector re-arm — the prompt it fired was consumed by
+      // the drop, so future sustained audio should be able to prompt again.
+      this.audioActivityDetector.resetPrompt();
+      if (this._notificationQueue.length === 0) return;
+    }
+
     debugLogger.info(
       "Flushing notification queue",
       { count: this._notificationQueue.length },
@@ -401,8 +435,29 @@ class MeetingDetectionEngine {
     }
   }
 
+  // Meeting-recording gate. Call sites (meeting-transcription-start/stop in
+  // ipcHandlers) keep their original setUserRecording(active) semantics.
   setUserRecording(active) {
-    this._userRecording = active;
+    if (this._meetingRecordingActive === active) return;
+    this._meetingRecordingActive = active;
+    this._applyGate();
+  }
+
+  // Dictation gate, driven by renderer truth (useAudioRecording onStateChange
+  // via the dictation-activity-changed IPC). Idempotent — repeated same-value
+  // calls are no-ops.
+  setDictationActive(active) {
+    if (this._dictationActive === active) return;
+    this._dictationActive = active;
+    this._applyGate();
+  }
+
+  _isGateActive() {
+    return this._meetingRecordingActive || this._dictationActive;
+  }
+
+  _applyGate() {
+    const active = this._isGateActive();
     this.audioActivityDetector.setUserRecording(active);
 
     if (active) {

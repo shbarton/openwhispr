@@ -29,6 +29,10 @@ contextBridge.exposeInMainWorld("electronAPI", {
   onToggleDictation: registerListener("toggle-dictation", (callback) => () => callback()),
   onStartDictation: registerListener("start-dictation", (callback) => () => callback()),
   onStopDictation: registerListener("stop-dictation", (callback) => () => callback()),
+  // Renderer → main: actual dictation recording state (renderer truth from
+  // useAudioRecording's onStateChange). Drives the meeting-detection
+  // dictation gate and the lifecycle bus `dictationActive` flag.
+  dictationActivityChanged: (active) => ipcRenderer.send("dictation-activity-changed", active),
 
   // Database functions
   saveTranscription: (text, rawText, options) =>
@@ -567,6 +571,10 @@ contextBridge.exposeInMainWorld("electronAPI", {
   deepgramStreamingFinalize: () => ipcRenderer.send("deepgram-streaming-finalize"),
   deepgramStreamingStop: () => ipcRenderer.invoke("deepgram-streaming-stop"),
   deepgramStreamingStatus: () => ipcRenderer.invoke("deepgram-streaming-status"),
+  // BYOK batch fallback: transcribe a recorded audio file (ArrayBuffer) via
+  // Deepgram's pre-recorded API using the user's own key.
+  deepgramTranscribeFile: (audioBuffer, options) =>
+    ipcRenderer.invoke("deepgram-transcribe-file", audioBuffer, options),
   onDeepgramPartialTranscript: registerListener(
     "deepgram-partial-transcript",
     (callback) => (_event, text) => callback(text)

@@ -449,20 +449,24 @@ class DeepgramStreaming {
     this.warmConnectionReady = false;
     this.warmSessionId = null;
 
+    // Stale-handler guard: events from this socket must not act on the
+    // instance once a newer socket has replaced it.
+    const sock = this.ws;
+    const guarded = (fn) => (...args) => { if (sock === this.ws) fn(...args); };
     this.ws.removeAllListeners("message");
-    this.ws.on("message", (data) => {
+    this.ws.on("message", guarded((data) => {
       this.handleMessage(data);
-    });
+    }));
 
     this.ws.removeAllListeners("error");
-    this.ws.on("error", (error) => {
+    this.ws.on("error", guarded((error) => {
       debugLogger.error("Deepgram WebSocket error", { error: error.message });
       this.cleanup();
       this.onError?.(error);
-    });
+    }));
 
     this.ws.removeAllListeners("close");
-    this.ws.on("close", (code, reason) => {
+    this.ws.on("close", guarded((code, reason) => {
       const wasActive = this.isConnected;
       debugLogger.debug("Deepgram WebSocket closed", {
         code,
@@ -473,10 +477,10 @@ class DeepgramStreaming {
         this.closeResolve({ text: this.accumulatedText });
       }
       this.cleanup();
-      if (wasActive && !this.isDisconnecting) {
+      if (wasActive && !this.isDisconnecting && code !== 1000) {
         this.onError?.(new Error(`Connection lost (code: ${code})`));
       }
-    });
+    }));
 
     this.startKeepAlive(this.ws);
     debugLogger.debug("Deepgram using pre-warmed connection");
@@ -617,16 +621,18 @@ class DeepgramStreaming {
       this.pendingReject = reject;
 
       this.connectionTimeout = setTimeout(() => {
-        this.cleanup();
         reject(new Error("Deepgram WebSocket connection timeout"));
+        this.cleanup();
       }, WEBSOCKET_TIMEOUT_MS);
 
       this.ws = new WebSocket(url, {
         headers: { Authorization: `${this.authHeaderPrefix} ${token}` },
       });
+      const sock = this.ws;
+      const guarded = (fn) => (...args) => { if (sock === this.ws) fn(...args); };
       this._connectStartedAt = connectStartedAt;
 
-      this.ws.on("open", () => {
+      this.ws.on("open", guarded(() => {
         const openMs = Date.now() - connectStartedAt;
         debugLogger.info("Deepgram WebSocket open", { openMs });
         // Resolve on open, not first message — Deepgram sends no message
@@ -644,29 +650,29 @@ class DeepgramStreaming {
           this.pendingResolve = null;
           this.pendingReject = null;
         }
-      });
+      }));
 
-      this.ws.on("message", (data) => {
+      this.ws.on("message", guarded((data) => {
         this.handleMessage(data);
-      });
+      }));
 
-      this.ws.on("error", (error) => {
+      this.ws.on("error", guarded((error) => {
         debugLogger.error("Deepgram WebSocket error", { error: error.message });
         // Invalidate cached token on auth failure so next attempt fetches fresh
         if (error.message && error.message.includes("401")) {
           this.cachedToken = null;
           this.tokenFetchedAt = null;
         }
-        this.cleanup();
         if (this.pendingReject) {
           this.pendingReject(error);
           this.pendingReject = null;
           this.pendingResolve = null;
         }
+        this.cleanup();
         this.onError?.(error);
-      });
+      }));
 
-      this.ws.on("close", (code, reason) => {
+      this.ws.on("close", guarded((code, reason) => {
         const wasActive = this.isConnected;
         debugLogger.debug("Deepgram WebSocket closed", {
           code,
@@ -682,10 +688,10 @@ class DeepgramStreaming {
           this.closeResolve({ text: this.accumulatedText });
         }
         this.cleanup();
-        if (wasActive && !this.isDisconnecting) {
+        if (wasActive && !this.isDisconnecting && code !== 1000) {
           this.onError?.(new Error(`Connection lost (code: ${code})`));
         }
-      });
+      }));
     });
   }
 
@@ -828,6 +834,7 @@ class DeepgramStreaming {
 
     if (!this.ws) return { text: this.accumulatedText };
 
+    const sock = this.ws;
     this.isDisconnecting = true;
 
     if (closeStream && this.ws.readyState === WebSocket.OPEN) {
@@ -847,11 +854,14 @@ class DeepgramStreaming {
       ]);
       clearTimeout(timeoutId);
 
-      this.closeResolve = null;
-      this.cleanup();
-      this.isDisconnecting = false;
-      this.accumulatedText = "";
-      this.finalSegments = [];
+      // Skip teardown if a newer session replaced the socket while we waited.
+      if (!this.ws || this.ws === sock) {
+        this.closeResolve = null;
+        this.cleanup();
+        this.isDisconnecting = false;
+        this.accumulatedText = "";
+        this.finalSegments = [];
+      }
       return result;
     }
 
@@ -872,7 +882,16 @@ class DeepgramStreaming {
     this.replayBuffer = [];
     this.replayBufferSize = 0;
 
+    if (this.pendingReject) {
+      this.pendingReject(new Error("Deepgram connection closed during setup"));
+      this.pendingReject = null;
+      this.pendingResolve = null;
+    }
+
     if (this.ws) {
+      // Detach handlers so late events from this socket can't touch a newer session.
+      this.ws.removeAllListeners();
+      this.ws.on("error", () => {});
       try {
         this.ws.close();
       } catch (err) {
@@ -910,6 +929,52 @@ class DeepgramStreaming {
 }
 
 /**
+ * POST an audio buffer to Deepgram's pre-recorded `/v1/listen` endpoint.
+ *
+ * Shared transport for `diarizeFileWithDeepgram` and the dictation BYOK batch
+ * fallback (`deepgram-transcribe-file` IPC). Builds the URL from `params`,
+ * authenticates with the long-lived `Token` scheme, aborts after `timeoutMs`,
+ * and throws on any non-2xx response (callers treat a throw as failure).
+ *
+ * @param {Buffer|Uint8Array} audioBuffer  Raw audio bytes to upload.
+ * @param {{
+ *   params: URLSearchParams,
+ *   contentType: string,
+ *   apiKey: string,
+ *   timeoutMs?: number,
+ *   errorLabel?: string,
+ * }} options
+ * @returns {Promise<object>} Parsed Deepgram JSON response.
+ */
+async function postToDeepgramListen(
+  audioBuffer,
+  { params, contentType, apiKey, timeoutMs = 120000, errorLabel = "Deepgram /v1/listen" }
+) {
+  const url = `https://api.deepgram.com/v1/listen?${params.toString()}`;
+
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), timeoutMs);
+  let response;
+  try {
+    response = await fetch(url, {
+      method: "POST",
+      headers: { Authorization: `Token ${apiKey}`, "Content-Type": contentType },
+      body: audioBuffer,
+      signal: controller.signal,
+    });
+  } finally {
+    clearTimeout(timer);
+  }
+
+  if (!response.ok) {
+    const body = await response.text().catch(() => "");
+    throw new Error(`${errorLabel} ${response.status}: ${body.slice(0, 200)}`);
+  }
+
+  return response.json();
+}
+
+/**
  * Diarize a finished WAV file with Deepgram's pre-recorded API (BYOK).
  *
  * Used for the canonical post-meeting transcript: Deepgram's native speaker
@@ -936,28 +1001,14 @@ async function diarizeFileWithDeepgram(wavPath, apiKey, opts = {}) {
   // We only need per-word speaker time-ranges (text comes from the live
   // transcript). WAV header carries the sample rate — no need to set it.
   const params = new URLSearchParams({ model, diarize_model: "latest" });
-  const url = `https://api.deepgram.com/v1/listen?${params.toString()}`;
 
-  const controller = new AbortController();
-  const timer = setTimeout(() => controller.abort(), timeoutMs);
-  let response;
-  try {
-    response = await fetch(url, {
-      method: "POST",
-      headers: { Authorization: `Token ${apiKey}`, "Content-Type": "audio/wav" },
-      body: audio,
-      signal: controller.signal,
-    });
-  } finally {
-    clearTimeout(timer);
-  }
-
-  if (!response.ok) {
-    const body = await response.text().catch(() => "");
-    throw new Error(`Deepgram batch diarization ${response.status}: ${body.slice(0, 200)}`);
-  }
-
-  const json = await response.json();
+  const json = await postToDeepgramListen(audio, {
+    params,
+    contentType: "audio/wav",
+    apiKey,
+    timeoutMs,
+    errorLabel: "Deepgram batch diarization",
+  });
   const words = json?.results?.channels?.[0]?.alternatives?.[0]?.words || [];
 
   // Diagnostic: surface the RAW truth so we can tell genuine 1-speaker audio
@@ -992,5 +1043,6 @@ async function diarizeFileWithDeepgram(wavPath, apiKey, opts = {}) {
 }
 
 DeepgramStreaming.diarizeFileWithDeepgram = diarizeFileWithDeepgram;
+DeepgramStreaming.postToDeepgramListen = postToDeepgramListen;
 
 module.exports = DeepgramStreaming;

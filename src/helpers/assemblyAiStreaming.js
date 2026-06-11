@@ -238,20 +238,24 @@ class AssemblyAiStreaming {
     this.warmConnectionReady = false;
     this.warmSessionId = null;
 
+    // Stale-handler guard: events from this socket must not act on the
+    // instance once a newer socket has replaced it.
+    const sock = this.ws;
+    const guarded = (fn) => (...args) => { if (sock === this.ws) fn(...args); };
     this.ws.removeAllListeners("message");
-    this.ws.on("message", (data) => {
+    this.ws.on("message", guarded((data) => {
       this.handleMessage(data);
-    });
+    }));
 
     this.ws.removeAllListeners("error");
-    this.ws.on("error", (error) => {
+    this.ws.on("error", guarded((error) => {
       debugLogger.error("AssemblyAI WebSocket error", { error: error.message });
       this.cleanup();
       this.onError?.(error);
-    });
+    }));
 
     this.ws.removeAllListeners("close");
-    this.ws.on("close", (code, reason) => {
+    this.ws.on("close", guarded((code, reason) => {
       const wasActive = this.isConnected;
       debugLogger.debug("AssemblyAI WebSocket closed", {
         code,
@@ -259,10 +263,10 @@ class AssemblyAiStreaming {
         wasActive,
       });
       this.cleanup();
-      if (wasActive && !this.isDisconnecting) {
+      if (wasActive && !this.isDisconnecting && code !== 1000) {
         this.onError?.(new Error(`Connection lost (code: ${code})`));
       }
-    });
+    }));
 
     debugLogger.debug("AssemblyAI using pre-warmed connection");
     return true;
@@ -323,32 +327,34 @@ class AssemblyAiStreaming {
       this.pendingReject = reject;
 
       this.connectionTimeout = setTimeout(() => {
-        this.cleanup();
         reject(new Error("AssemblyAI WebSocket connection timeout"));
+        this.cleanup();
       }, WEBSOCKET_TIMEOUT_MS);
 
       this.ws = new WebSocket(url);
+      const sock = this.ws;
+      const guarded = (fn) => (...args) => { if (sock === this.ws) fn(...args); };
 
-      this.ws.on("open", () => {
+      this.ws.on("open", guarded(() => {
         debugLogger.debug("AssemblyAI WebSocket connected");
-      });
+      }));
 
-      this.ws.on("message", (data) => {
+      this.ws.on("message", guarded((data) => {
         this.handleMessage(data);
-      });
+      }));
 
-      this.ws.on("error", (error) => {
+      this.ws.on("error", guarded((error) => {
         debugLogger.error("AssemblyAI WebSocket error", { error: error.message });
-        this.cleanup();
         if (this.pendingReject) {
           this.pendingReject(error);
           this.pendingReject = null;
           this.pendingResolve = null;
         }
+        this.cleanup();
         this.onError?.(error);
-      });
+      }));
 
-      this.ws.on("close", (code, reason) => {
+      this.ws.on("close", guarded((code, reason) => {
         const wasActive = this.isConnected;
         debugLogger.debug("AssemblyAI WebSocket closed", {
           code,
@@ -356,10 +362,10 @@ class AssemblyAiStreaming {
           wasActive,
         });
         this.cleanup();
-        if (wasActive && !this.isDisconnecting) {
+        if (wasActive && !this.isDisconnecting && code !== 1000) {
           this.onError?.(new Error(`Connection lost (code: ${code})`));
         }
-      });
+      }));
     });
   }
 
@@ -513,6 +519,7 @@ class AssemblyAiStreaming {
   async disconnect(terminate = true) {
     if (!this.ws) return { text: this.accumulatedText };
 
+    const sock = this.ws;
     this.isDisconnecting = true;
 
     if (terminate && this.ws.readyState === WebSocket.OPEN) {
@@ -533,9 +540,12 @@ class AssemblyAiStreaming {
         ]);
         clearTimeout(timeoutId);
 
-        this.terminationResolve = null;
-        this.cleanup();
-        this.isDisconnecting = false;
+        // Skip teardown if a newer session replaced the socket while we waited.
+        if (!this.ws || this.ws === sock) {
+          this.terminationResolve = null;
+          this.cleanup();
+          this.isDisconnecting = false;
+        }
         return result;
       } catch (err) {
         debugLogger.debug("AssemblyAI terminate send failed", { error: err.message });
@@ -557,7 +567,16 @@ class AssemblyAiStreaming {
     this.completedSegments = [];
     this.speechStartedAt = null;
 
+    if (this.pendingReject) {
+      this.pendingReject(new Error("AssemblyAI connection closed during setup"));
+      this.pendingReject = null;
+      this.pendingResolve = null;
+    }
+
     if (this.ws) {
+      // Detach handlers so late events from this socket can't touch a newer session.
+      this.ws.removeAllListeners();
+      this.ws.on("error", () => {});
       try {
         this.ws.close();
       } catch (err) {

@@ -4,6 +4,12 @@ import "./TranscriptionBar.css";
 
 export type TranscriptionBarState = "idle" | "recording" | "transcribing" | "error";
 
+// How long "transcribing" may run before the View's slow-transcription
+// affordance (message + cancel button) should be shown. Shared by every
+// surface that drives this View's `showSlowMessage` prop (notes
+// TranscriptionBar and the dictation panel in App.jsx).
+export const SLOW_TRANSCRIPTION_THRESHOLD_MS = 5000;
+
 interface TranscriptionBarViewProps {
   state: TranscriptionBarState;
   /** Normalized mic levels (0-1), 24 values for waveform bars */

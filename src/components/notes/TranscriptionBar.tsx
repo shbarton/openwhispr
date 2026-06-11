@@ -6,7 +6,11 @@ import {
   stopRecording,
   getMicAnalyser,
 } from "../../stores/meetingRecordingStore";
-import { TranscriptionBarView, type TranscriptionBarState } from "./TranscriptionBarView";
+import {
+  TranscriptionBarView,
+  SLOW_TRANSCRIPTION_THRESHOLD_MS,
+  type TranscriptionBarState,
+} from "./TranscriptionBarView";
 
 interface TranscriptionBarProps {
   /** Note ID to record to (optional - will create new note if not provided) */
@@ -25,7 +29,6 @@ interface TranscriptionBarProps {
 
 const LEVEL_BAR_COUNT = 12;
 const ERROR_AUTO_DISMISS_MS = 3200;
-const SLOW_TRANSCRIPTION_THRESHOLD_MS = 5000;
 const TRANSCRIPTION_TIMEOUT_MS = 30000;
 
 /**

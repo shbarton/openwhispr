@@ -144,6 +144,11 @@ class AudioManager {
     this.streamingStartInProgress = false;
     this.stopRequestedDuringStreamingStart = false;
     this.cancelRequestedDuringStreamingStart = false;
+    // Monotonic session counter — cancelProcessing bumps it so an in-flight
+    // stopStreamingRecording pipeline can detect the cancel and discard its
+    // result instead of pasting after the user pressed Escape.
+    this.streamingSessionGeneration = 0;
+    this.streamingSessionIsByok = false;
     this.streamingFallbackRecorder = null;
     this.streamingFallbackChunks = [];
     this.skipReasoning = false;
@@ -277,6 +282,31 @@ registerProcessor("pcm-streaming-processor", PCMStreamingProcessor);
       }
       this._levelAnalyser = null;
     }
+  }
+
+  // Tear down the silence-detection monitor (interval + AudioContext +
+  // analyser) started by the non-streaming recording path.
+  _stopSilenceMonitor() {
+    if (this._silenceInterval) {
+      clearInterval(this._silenceInterval);
+      this._silenceInterval = null;
+    }
+    this._silenceCtx?.close().catch(() => {});
+    this._silenceCtx = null;
+    this._silenceAnalyser = null;
+  }
+
+  // A cancelProcessing() bump of streamingSessionGeneration invalidates the
+  // in-flight stop pipeline: discard the take (no paste, no usage report —
+  // cancelProcessing already fired the idle state change) and re-warm.
+  _discardCancelledStreamingStop() {
+    logger.info("Streaming stop cancelled mid-pipeline, discarding transcript", {}, "streaming");
+    if (this.shouldUseStreaming()) {
+      this.warmupStreamingConnection().catch((e) => {
+        logger.debug("Background re-warm after cancel failed", { error: e.message }, "streaming");
+      });
+    }
+    return false;
   }
 
   setSkipReasoning(skip) {
@@ -463,13 +493,7 @@ registerProcessor("pcm-streaming-processor", PCMStreamingProcessor);
       };
 
       this.mediaRecorder.onstop = async () => {
-        if (this._silenceInterval) {
-          clearInterval(this._silenceInterval);
-          this._silenceInterval = null;
-        }
-        this._silenceCtx?.close().catch(() => {});
-        this._silenceCtx = null;
-        this._silenceAnalyser = null;
+        this._stopSilenceMonitor();
 
         this.cleanupPreview({ showCleanup: this.shouldShowPreviewCleanupState() });
 
@@ -571,6 +595,8 @@ registerProcessor("pcm-streaming-processor", PCMStreamingProcessor);
   cancelRecording() {
     if (this.mediaRecorder && this.mediaRecorder.state === "recording") {
       this.mediaRecorder.onstop = () => {
+        this._stopSilenceMonitor();
+
         this.cleanupPreview({ dismiss: true });
         this.isRecording = false;
         this.isProcessing = false;
@@ -592,6 +618,10 @@ registerProcessor("pcm-streaming-processor", PCMStreamingProcessor);
 
   cancelProcessing() {
     if (this.isProcessing) {
+      // Invalidate any in-flight streaming stop pipeline (see
+      // stopStreamingRecording's generation checks) so it bails instead of
+      // pasting a cancelled transcript.
+      this.streamingSessionGeneration++;
       this.isProcessing = false;
       this.onStateChange?.({ isRecording: false, isProcessing: false });
       return true;
@@ -2292,6 +2322,11 @@ registerProcessor("pcm-streaming-processor", PCMStreamingProcessor);
       this.streamingProcessor = new AudioWorkletNode(audioContext, "pcm-streaming-processor");
       const provider = this.getStreamingProvider();
 
+      // Stash the mode for this session — the stop pipeline's Cloud usage
+      // report must not fire for BYOK takes (same decision as the `mode`
+      // param passed to provider.start below).
+      this.streamingSessionIsByok = getSettings().cloudTranscriptionMode === "byok";
+
       this.streamingProcessor.port.onmessage = (event) => {
         if (!this.isStreaming) return;
         provider.send(event.data);
@@ -2434,15 +2469,21 @@ registerProcessor("pcm-streaming-processor", PCMStreamingProcessor);
       );
 
       this.streamingStartInProgress = false;
+      // Deferred cancel/stop: the session is already over by the time this
+      // start call resolves, so return false — a truthy return would make
+      // performStartRecording register the global Escape hotkey (leaking a
+      // system-wide grab while idle) and play the start cue for a dead take.
       if (this.cancelRequestedDuringStreamingStart) {
         this.cancelRequestedDuringStreamingStart = false;
         logger.debug("Applying deferred streaming cancel requested during startup", {}, "streaming");
-        return this.cancelStreamingRecording();
+        this.cancelStreamingRecording();
+        return false;
       }
       if (this.stopRequestedDuringStreamingStart) {
         this.stopRequestedDuringStreamingStart = false;
         logger.debug("Applying deferred streaming stop requested during startup", {}, "streaming");
-        return this.stopStreamingRecording();
+        await this.stopStreamingRecording();
+        return false;
       }
       return true;
     } catch (error) {
@@ -2491,6 +2532,11 @@ registerProcessor("pcm-streaming-processor", PCMStreamingProcessor);
 
     if (!this.isStreaming) return false;
 
+    // Snapshot the session generation — cancelProcessing bumps it, and every
+    // await below is a window for the user to cancel. Checked before the
+    // transcript is committed (mirrors the batch path's isProcessing guard).
+    const generation = this.streamingSessionGeneration;
+
     const durationSeconds = this.recordingStartTime
       ? (Date.now() - this.recordingStartTime) / 1000
       : null;
@@ -2500,6 +2546,7 @@ registerProcessor("pcm-streaming-processor", PCMStreamingProcessor);
 
     // 1. Update UI immediately
     this.isRecording = false;
+    this.isProcessing = true;
     this.recordingStartTime = null;
     this.onStateChange?.({ isRecording: false, isProcessing: true, isStreaming: false });
     this._stopLevelMonitor();
@@ -2525,15 +2572,28 @@ registerProcessor("pcm-streaming-processor", PCMStreamingProcessor);
     }
     this.streamingAudioContext = null;
 
-    // Stop fallback recorder before stopping media tracks
+    // Stop fallback recorder before stopping media tracks. A wedged
+    // MediaRecorder that never fires onstop must not freeze the bar at
+    // "transcribing" — cap the wait and proceed without the blob.
     let fallbackBlob = null;
     if (this.streamingFallbackRecorder?.state === "recording") {
+      const fallbackRecorder = this.streamingFallbackRecorder;
       fallbackBlob = await new Promise((resolve) => {
-        this.streamingFallbackRecorder.onstop = () => {
-          const mimeType = this.streamingFallbackRecorder.mimeType || "audio/webm";
+        const stopTimeout = setTimeout(() => {
+          logger.warn("Fallback recorder stop timed out, proceeding without blob", {}, "streaming");
+          resolve(null);
+        }, 2000);
+        fallbackRecorder.onstop = () => {
+          clearTimeout(stopTimeout);
+          const mimeType = fallbackRecorder.mimeType || "audio/webm";
           resolve(new Blob(this.streamingFallbackChunks, { type: mimeType }));
         };
-        this.streamingFallbackRecorder.stop();
+        try {
+          fallbackRecorder.stop();
+        } catch {
+          clearTimeout(stopTimeout);
+          resolve(null);
+        }
       });
     }
     if (fallbackBlob) {
@@ -2596,6 +2656,12 @@ registerProcessor("pcm-streaming-processor", PCMStreamingProcessor);
       },
       "streaming"
     );
+
+    // Cancelled during the flush/finalize awaits above — teardown is already
+    // done; discard before spending anything on reasoning or fallback.
+    if (generation !== this.streamingSessionGeneration) {
+      return this._discardCancelledStreamingStop();
+    }
 
     const stSettings = getSettings();
     const streamingSttModel = stopResult?.model || "nova-3";
@@ -2688,19 +2754,42 @@ registerProcessor("pcm-streaming-processor", PCMStreamingProcessor);
       }
     }
 
-    // If streaming produced no text, fall back to batch transcription
-    // (batch fallback records usage server-side via /api/transcribe)
+    // If streaming produced no text, fall back to batch transcription.
+    // Routed by mode: BYOK Deepgram posts the fallback WebM to Deepgram's
+    // pre-recorded API (never OpenWhispr Cloud); Cloud mode is unchanged
+    // (and records usage server-side via /api/transcribe).
     let usedBatchFallback = false;
     if (!finalText && durationSeconds > 2 && fallbackBlob?.size > 0) {
+      const byokDeepgramFallback = this.streamingSessionIsByok && this.isDeepgramBYOK();
       logger.info(
         "Streaming produced no text, falling back to batch transcription",
-        { durationSeconds, blobSize: fallbackBlob.size },
+        {
+          durationSeconds,
+          blobSize: fallbackBlob.size,
+          route: byokDeepgramFallback ? "deepgram-byok" : "cloud",
+        },
         "streaming"
       );
       try {
-        const batchResult = await this.processWithOpenWhisprCloud(fallbackBlob, {
-          durationSeconds,
-        });
+        let batchResult;
+        if (byokDeepgramFallback) {
+          const fallbackBuffer = await fallbackBlob.arrayBuffer();
+          const res = await window.electronAPI.deepgramTranscribeFile(fallbackBuffer, {
+            mimeType: fallbackBlob.type || "audio/webm",
+            language:
+              stSettings.preferredLanguage && stSettings.preferredLanguage !== "auto"
+                ? stSettings.preferredLanguage
+                : undefined,
+          });
+          if (!res?.success) {
+            throw new Error(res?.error || "Deepgram batch fallback failed");
+          }
+          batchResult = res;
+        } else {
+          batchResult = await this.processWithOpenWhisprCloud(fallbackBlob, {
+            durationSeconds,
+          });
+        }
         if (batchResult?.text) {
           finalText = batchResult.text;
           usedBatchFallback = true;
@@ -2709,6 +2798,11 @@ registerProcessor("pcm-streaming-processor", PCMStreamingProcessor);
       } catch (fallbackErr) {
         logger.error("Batch fallback failed", { error: fallbackErr.message }, "streaming");
       }
+    }
+
+    // Cancelled during the reasoning/fallback awaits — bail before committing.
+    if (generation !== this.streamingSessionGeneration) {
+      return this._discardCancelledStreamingStop();
     }
 
     if (finalText) {
@@ -2728,7 +2822,7 @@ registerProcessor("pcm-streaming-processor", PCMStreamingProcessor);
         source: `${this.getStreamingProviderName()}-streaming`,
       });
 
-      if (!usedBatchFallback) {
+      if (!usedBatchFallback && !this.streamingSessionIsByok) {
         (async () => {
           try {
             await withSessionRefresh(async () => {
@@ -2757,7 +2851,7 @@ registerProcessor("pcm-streaming-processor", PCMStreamingProcessor);
           }
           window.dispatchEvent(new Event("usage-changed"));
         })();
-      } else {
+      } else if (usedBatchFallback) {
         window.dispatchEvent(new Event("usage-changed"));
       }
 
@@ -2932,6 +3026,7 @@ registerProcessor("pcm-streaming-processor", PCMStreamingProcessor);
     this.lastAudioBlob = null;
     this.lastAudioMetadata = null;
     this._stopLevelMonitor();
+    this._stopSilenceMonitor();
     if (this.isStreaming) {
       this.cleanupStreaming();
     }
