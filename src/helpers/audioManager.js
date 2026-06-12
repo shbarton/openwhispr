@@ -2620,26 +2620,43 @@ registerProcessor("pcm-streaming-processor", PCMStreamingProcessor);
     await new Promise((resolve) => setTimeout(resolve, 300));
     const tForceEndpoint = performance.now();
 
-    const stopResult = await provider.stop().catch((e) => {
-      logger.debug("Streaming disconnect error", { error: e.message }, "streaming");
-      return { success: false };
-    });
-    const tTerminate = performance.now();
-
+    // Prefer finals already streamed in; fall back to the last partial. In the
+    // common case this is non-empty *before* the socket closes, so we don't
+    // need the close handshake to know what to paste.
     finalText = this.streamingFinalText || "";
-
     if (!finalText && this.streamingPartialText) {
       finalText = this.streamingPartialText;
       logger.debug("Using partial text as fallback", { textLength: finalText.length }, "streaming");
     }
 
-    if (!finalText && stopResult?.text) {
-      finalText = stopResult.text;
-      logger.debug(
-        "Using disconnect result text as fallback",
-        { textLength: finalText.length },
-        "streaming"
-      );
+    // Close the provider socket. When we already have a transcript on a BYOK
+    // session, close it in the BACKGROUND: Deepgram's close handshake has been
+    // observed to take 3-4 s, and gating the paste on it makes dictation feel
+    // slow for no reason. BYOK-only because Cloud usage reporting still needs
+    // the close result (audioBytesSent/model) synchronously. When we have no
+    // text yet, the close result is our last transcript source — await it so
+    // the batch fallback below can run.
+    let stopResult = null;
+    let tTerminate = tForceEndpoint;
+    const closedInBackground = !!finalText && this.streamingSessionIsByok;
+    if (closedInBackground) {
+      provider.stop().catch((e) => {
+        logger.debug("Streaming disconnect error (bg)", { error: e.message }, "streaming");
+      });
+    } else {
+      stopResult = await provider.stop().catch((e) => {
+        logger.debug("Streaming disconnect error", { error: e.message }, "streaming");
+        return { success: false };
+      });
+      tTerminate = performance.now();
+      if (!finalText && stopResult?.text) {
+        finalText = stopResult.text;
+        logger.debug(
+          "Using disconnect result text as fallback",
+          { textLength: finalText.length },
+          "streaming"
+        );
+      }
     }
 
     this.cleanupStreamingListeners();
@@ -2653,6 +2670,7 @@ registerProcessor("pcm-streaming-processor", PCMStreamingProcessor);
         terminateRoundTripMs: Math.round(tTerminate - tForceEndpoint),
         totalStopMs: Math.round(tTerminate - t0),
         textLength: finalText.length,
+        closedInBackground,
       },
       "streaming"
     );
