@@ -2,6 +2,7 @@ import { useEffect } from "react";
 import {
   getMicAnalyser,
   primeMeetingWorklet,
+  stopRecording,
   useMeetingRecordingStore,
 } from "../stores/meetingRecordingStore";
 import type { MeetingSessionPatch } from "../types/meetingLifecycle";
@@ -15,6 +16,15 @@ export default function MeetingRecordingMount(): null {
 
   useEffect(() => {
     primeMeetingWorklet();
+  }, []);
+
+  // "Yes, wrap up" from the end-detection prompt routes here so the stop runs
+  // through the exact same control-panel path as the manual Stop button.
+  useEffect(() => {
+    const cleanup = window.electronAPI?.onMeetingWrapUpStop?.(() => {
+      void stopRecording();
+    });
+    return () => cleanup?.();
   }, []);
 
   useEffect(() => {

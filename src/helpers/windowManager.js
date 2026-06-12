@@ -1164,8 +1164,14 @@ class WindowManager {
     const display = screen.getPrimaryDisplay();
     const position = WindowPositionUtil.getNotificationPosition(display);
 
+    // The wrap-up prompt carries two action buttons on their own row, so it
+    // needs a little more height than the single-button "Meeting Detected" toast.
+    const isWrap = promptData?.kind === "wrap";
+    const sizeOverride = isWrap ? { height: 120 } : {};
+
     this.notificationWindow = new BrowserWindow({
       ...NOTIFICATION_WINDOW_CONFIG,
+      ...sizeOverride,
       ...position,
     });
 
@@ -1202,12 +1208,17 @@ class WindowManager {
       }
     }, 3000);
 
-    this._notificationTimeout = setTimeout(() => {
-      if (this.meetingDetectionEngine) {
-        this.meetingDetectionEngine.handleNotificationTimeout();
-      }
-      this.dismissMeetingNotification();
-    }, 30000);
+    // The wrap-up prompt manages its own timeout/auto-retract inside
+    // MeetingEndDetector — don't auto-dismiss it here (and never route it to the
+    // start-detection timeout handler, which clears unrelated detections).
+    if (!isWrap) {
+      this._notificationTimeout = setTimeout(() => {
+        if (this.meetingDetectionEngine) {
+          this.meetingDetectionEngine.handleNotificationTimeout();
+        }
+        this.dismissMeetingNotification();
+      }, 30000);
+    }
 
     this.notificationWindow.on("closed", () => {
       this.notificationWindow = null;

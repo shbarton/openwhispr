@@ -8,7 +8,19 @@ interface NotificationData {
   title: string;
   body: string;
   event: any;
+  // "wrap" = end-of-meeting prompt (two actions). Absent = start prompt.
+  kind?: string;
 }
+
+const MeetingGlyph = () => (
+  <svg viewBox="0 0 1024 1024" className="w-4.5 h-4.5">
+    <rect width="1024" height="1024" rx="241" fill="#2056DF" />
+    <circle cx="512" cy="512" r="314" fill="#2056DF" stroke="white" strokeWidth="74" />
+    <path d="M512 383V641" stroke="white" strokeWidth="74" strokeLinecap="round" />
+    <path d="M627 457V568" stroke="white" strokeWidth="74" strokeLinecap="round" />
+    <path d="M397 457V568" stroke="white" strokeWidth="74" strokeLinecap="round" />
+  </svg>
+);
 
 export default function MeetingNotificationOverlay() {
   const [data, setData] = useState<NotificationData | null>(null);
@@ -48,6 +60,16 @@ export default function MeetingNotificationOverlay() {
     },
     [data]
   );
+
+  // Esc dismisses the wrap-up prompt (it's interactive, so it can take key
+  // events while hovered/focused).
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === "Escape") respond("dismiss");
+    };
+    document.addEventListener("keydown", onKey);
+    return () => document.removeEventListener("keydown", onKey);
+  }, [respond]);
 
   const handleMouseEnter = useCallback(() => {
     setIsHovered(true);
@@ -89,33 +111,59 @@ export default function MeetingNotificationOverlay() {
           <X className="size-3" />
         </button>
 
-        <div className="flex items-center gap-2.5">
-          <div className="shrink-0 bg-primary/10 rounded-md p-1">
-            <svg viewBox="0 0 1024 1024" className="w-4.5 h-4.5">
-              <rect width="1024" height="1024" rx="241" fill="#2056DF" />
-              <circle cx="512" cy="512" r="314" fill="#2056DF" stroke="white" strokeWidth="74" />
-              <path d="M512 383V641" stroke="white" strokeWidth="74" strokeLinecap="round" />
-              <path d="M627 457V568" stroke="white" strokeWidth="74" strokeLinecap="round" />
-              <path d="M397 457V568" stroke="white" strokeWidth="74" strokeLinecap="round" />
-            </svg>
+        {data?.kind === "wrap" ? (
+          <div className="flex flex-col gap-2">
+            <div className="flex items-center gap-2.5">
+              <div className="shrink-0 bg-primary/10 rounded-md p-1">
+                <MeetingGlyph />
+              </div>
+              <div className="flex-1 min-w-0">
+                <p className="text-[12px] font-semibold text-foreground leading-tight truncate">
+                  {data?.title ?? "Meeting wrapped?"}
+                </p>
+                <p className="text-[11px] text-muted-foreground leading-tight mt-0.5">
+                  {data?.body ?? "Your call looks finished — stop recording?"}
+                </p>
+              </div>
+            </div>
+            <div className="flex items-center justify-end gap-1.5">
+              <button
+                onClick={() => respond("keep")}
+                className="text-[11px] font-medium px-2.5 py-1 rounded-md text-muted-foreground hover:text-foreground hover:bg-muted transition-colors"
+              >
+                Keep recording
+              </button>
+              <button
+                onClick={() => respond("wrap")}
+                className="bg-primary text-primary-foreground hover:bg-primary/90 text-[11px] font-medium px-2.5 py-1 rounded-md transition-colors"
+              >
+                Wrap up
+              </button>
+            </div>
           </div>
+        ) : (
+          <div className="flex items-center gap-2.5">
+            <div className="shrink-0 bg-primary/10 rounded-md p-1">
+              <MeetingGlyph />
+            </div>
 
-          <div className="flex-1 min-w-0">
-            <p className="text-[12px] font-semibold text-foreground leading-tight truncate">
-              {data?.title ?? "Meeting Detected"}
-            </p>
-            <p className="text-[11px] text-muted-foreground leading-tight mt-0.5">
-              {data?.body ?? "Want to take notes?"}
-            </p>
+            <div className="flex-1 min-w-0">
+              <p className="text-[12px] font-semibold text-foreground leading-tight truncate">
+                {data?.title ?? "Meeting Detected"}
+              </p>
+              <p className="text-[11px] text-muted-foreground leading-tight mt-0.5">
+                {data?.body ?? "Want to take notes?"}
+              </p>
+            </div>
+
+            <button
+              onClick={() => respond("start")}
+              className="shrink-0 bg-primary text-primary-foreground hover:bg-primary/90 text-[11px] font-medium px-2.5 py-1 rounded-md transition-colors"
+            >
+              Start Recording
+            </button>
           </div>
-
-          <button
-            onClick={() => respond("start")}
-            className="shrink-0 bg-primary text-primary-foreground hover:bg-primary/90 text-[11px] font-medium px-2.5 py-1 rounded-md transition-colors"
-          >
-            Start Recording
-          </button>
-        </div>
+        )}
       </div>
     </div>
   );

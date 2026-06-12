@@ -332,6 +332,7 @@ class IPCHandlers {
     this.googleCalendarManager = managers.googleCalendarManager;
     this.meetingDetectionEngine = managers.meetingDetectionEngine;
     this.meetingLifecycleManager = managers.meetingLifecycleManager;
+    this.meetingEndDetector = managers.meetingEndDetector;
     this.audioTapManager = managers.audioTapManager;
     this.linuxPortalAudioManager = managers.linuxPortalAudioManager;
     this.meetingAecManager = managers.meetingAecManager;
@@ -5727,6 +5728,9 @@ class IPCHandlers {
     ipcMain.handle("dictation-realtime-start", async (event, options = {}) => {
       try {
         clearDictationIdleTimer();
+        // Shared gate: tell the lifecycle bus dictation is active so meeting
+        // end-detection won't pop a wrap-up prompt mid-dictation.
+        this.meetingLifecycleManager?.applyPatch({ dictationActive: true });
         if (!this._dictationStreaming?.isConnected) await connectDictationStreaming(event, options);
         return { success: true };
       } catch (err) {
@@ -5740,6 +5744,7 @@ class IPCHandlers {
 
     ipcMain.handle("dictation-realtime-stop", async () => {
       clearDictationIdleTimer();
+      this.meetingLifecycleManager?.applyPatch({ dictationActive: false });
       if (!this._dictationStreaming) {
         return { success: true, text: "" };
       }
@@ -7858,7 +7863,13 @@ class IPCHandlers {
 
     ipcMain.handle("meeting-notification-respond", async (_event, detectionId, action) => {
       try {
-        await this.meetingDetectionEngine.handleNotificationResponse(detectionId, action);
+        // Wrap-up ("Meeting wrapped?") prompts are owned by the end detector;
+        // start-detection prompts by the detection engine.
+        if (typeof detectionId === "string" && detectionId.startsWith("wrap:")) {
+          await this.meetingEndDetector?.handleResponse(action);
+        } else {
+          await this.meetingDetectionEngine.handleNotificationResponse(detectionId, action);
+        }
         return { success: true };
       } catch (error) {
         return { success: false, error: error.message };

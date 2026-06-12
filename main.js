@@ -262,6 +262,7 @@ const LinuxPortalAudioManager = require("./src/helpers/linuxPortalAudioManager")
 const MeetingAecManager = require("./src/helpers/meetingAecManager");
 const MeetingDetectionEngine = require("./src/helpers/meetingDetectionEngine");
 const MeetingRecordingLifecycleManager = require("./src/helpers/meetingRecordingLifecycleManager");
+const MeetingEndDetector = require("./src/helpers/meetingEndDetector");
 const { i18nMain, changeLanguage } = require("./src/helpers/i18nMain");
 const { ensureYdotool } = require("./src/helpers/ensureYdotool");
 const sidecarRegistry = require("./src/helpers/sidecarRegistry");
@@ -287,6 +288,7 @@ let whisperCudaManager = null;
 let googleCalendarManager = null;
 let meetingDetectionEngine = null;
 let meetingLifecycleManager = null;
+let meetingEndDetector = null;
 let audioTapManager = null;
 let linuxPortalAudioManager = null;
 let meetingAecManager = null;
@@ -357,9 +359,10 @@ function initializeCoreManagers() {
   parakeetManager = new ParakeetManager();
   diarizationManager = new DiarizationManager();
   googleCalendarManager = new GoogleCalendarManager(databaseManager, windowManager);
+  const meetingProcessDetector = new MeetingProcessDetector();
   meetingDetectionEngine = new MeetingDetectionEngine(
     googleCalendarManager,
-    new MeetingProcessDetector(),
+    meetingProcessDetector,
     new AudioActivityDetector(),
     windowManager,
     databaseManager
@@ -367,6 +370,12 @@ function initializeCoreManagers() {
   windowManager.meetingDetectionEngine = meetingDetectionEngine;
   meetingLifecycleManager = new MeetingRecordingLifecycleManager();
   windowManager.meetingLifecycleManager = meetingLifecycleManager;
+  meetingEndDetector = new MeetingEndDetector(
+    meetingLifecycleManager,
+    windowManager,
+    meetingProcessDetector
+  );
+  windowManager.meetingEndDetector = meetingEndDetector;
   updateManager = new UpdateManager();
   updateManager.setWindowManager(windowManager);
   windowsKeyManager = new WindowsKeyManager();
@@ -394,6 +403,7 @@ function initializeCoreManagers() {
     googleCalendarManager,
     meetingDetectionEngine,
     meetingLifecycleManager,
+    meetingEndDetector,
     audioTapManager,
     linuxPortalAudioManager,
     meetingAecManager,
@@ -457,6 +467,7 @@ function initializeDeferredManagers() {
 
   googleCalendarManager.start();
   meetingDetectionEngine.start();
+  meetingEndDetector.start();
 }
 
 app.on("open-url", (event, url) => {
@@ -1511,6 +1522,7 @@ function performSyncTeardown() {
   if (windowsKeyManager) windowsKeyManager.stop();
   if (linuxKeyManager) linuxKeyManager.stop();
   if (meetingDetectionEngine) meetingDetectionEngine.stop();
+  if (meetingEndDetector) meetingEndDetector.stop();
   if (googleCalendarManager) googleCalendarManager.stop();
   if (audioTapManager) audioTapManager.stop().catch(() => {});
   if (linuxPortalAudioManager) linuxPortalAudioManager.stop().catch(() => {});

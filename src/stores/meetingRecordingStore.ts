@@ -578,6 +578,12 @@ function flushPendingSegments() {
   }
   useMeetingRecordingStore.setState(patch);
 
+  // Feed the meeting lifecycle bus: a committed final segment is the strongest
+  // "the meeting is still active" signal, and its absence drives end-detection.
+  if (finals.length > 0) {
+    publishMeetingSession({ lastTranscriptSegmentAt: new Date().toISOString() });
+  }
+
   // [latency-probe] One coalesced commit per frame instead of one per final.
   // If ipcLagMs still grows over a long meeting, the bottleneck is upstream of
   // this commit (delivery), not the render path.

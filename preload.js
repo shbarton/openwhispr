@@ -625,6 +625,10 @@ contextBridge.exposeInMainWorld("electronAPI", {
     "meeting-session-snapshot",
     (callback) => (_event, snapshot) => callback(snapshot)
   ),
+  onMeetingWrapUpStop: registerListener(
+    "meeting-wrap-up-stop",
+    (callback) => () => callback()
+  ),
 
   // Dictation realtime streaming
   dictationRealtimeWarmup: (options) => ipcRenderer.invoke("dictation-realtime-warmup", options),

@@ -1666,6 +1666,7 @@ declare global {
           snapshot: import("./meetingLifecycle").MeetingSessionSnapshot
         ) => void
       ) => () => void;
+      onMeetingWrapUpStop?: (callback: () => void) => () => void;
 
       // Speaker diarization
       downloadDiarizationModels?: () => Promise<{ success: boolean; error?: string }>;
