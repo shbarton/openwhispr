@@ -10,6 +10,7 @@ import {
   getLocalSpeechGateDecision,
   recordLocalSpeechWindow,
 } from "./localSpeechGate";
+import { reacquireIfDead } from "./micTrackHealth";
 import { getSettings, getEffectiveCleanupModel, isCloudCleanupMode } from "../stores/settingsStore";
 import { detectAgentName } from "../config/agentDetection";
 import { resolvePrompt } from "../config/prompts";
@@ -121,6 +122,14 @@ class AudioManager {
       this.cachedApiKeyProvider = null;
     };
     window.addEventListener("api-key-changed", this._onApiKeyChanged);
+
+    // Invalidate the pinned mic device when the OS adds/removes/suspends inputs.
+    // Otherwise wake-after-idle keeps requesting a stale deviceId that yields silence.
+    this._onDeviceChange = () => {
+      this.cachedMicDeviceId = null;
+      this.micDriverWarmedUp = false;
+    };
+    navigator.mediaDevices?.addEventListener?.("devicechange", this._onDeviceChange);
     this.cachedTranscriptionEndpoint = null;
     this.cachedEndpointProvider = null;
     this.cachedEndpointBaseUrl = null;
@@ -431,7 +440,14 @@ registerProcessor("pcm-streaming-processor", PCMStreamingProcessor);
       }
 
       const constraints = await this.getAudioConstraints();
-      const micStream = await navigator.mediaDevices.getUserMedia(constraints);
+      const micStream = await reacquireIfDead(
+        await navigator.mediaDevices.getUserMedia(constraints),
+        () => {
+          this.cachedMicDeviceId = null;
+          return this.getAudioConstraints();
+        },
+        logger
+      );
 
       const audioTrack = micStream.getAudioTracks()[0];
       if (audioTrack) {
@@ -443,6 +459,8 @@ registerProcessor("pcm-streaming-processor", PCMStreamingProcessor);
             deviceId: settings.deviceId?.slice(0, 20) + "...",
             sampleRate: settings.sampleRate,
             channelCount: settings.channelCount,
+            muted: audioTrack.muted,
+            readyState: audioTrack.readyState,
           },
           "audio"
         );
@@ -2276,8 +2294,17 @@ registerProcessor("pcm-streaming-processor", PCMStreamingProcessor);
       const tConstraints = performance.now();
 
       // 1. Get mic stream (can take 10-15s on cold macOS mic driver)
-      const stream = await navigator.mediaDevices.getUserMedia(constraints);
+      const rawStream = await navigator.mediaDevices.getUserMedia(constraints);
       const tMedia = performance.now();
+
+      const stream = await reacquireIfDead(
+        rawStream,
+        () => {
+          this.cachedMicDeviceId = null;
+          return this.getAudioConstraints();
+        },
+        logger
+      );
 
       const audioTrack = stream.getAudioTracks()[0];
       if (audioTrack) {
@@ -2289,6 +2316,8 @@ registerProcessor("pcm-streaming-processor", PCMStreamingProcessor);
             deviceId: settings.deviceId?.slice(0, 20) + "...",
             sampleRate: settings.sampleRate,
             usedCachedId: !!this.cachedMicDeviceId,
+            muted: audioTrack.muted,
+            readyState: audioTrack.readyState,
           },
           "audio"
         );
@@ -3072,6 +3101,9 @@ registerProcessor("pcm-streaming-processor", PCMStreamingProcessor);
     this.onStreamingCommit = null;
     if (this._onApiKeyChanged) {
       window.removeEventListener("api-key-changed", this._onApiKeyChanged);
+    }
+    if (this._onDeviceChange) {
+      navigator.mediaDevices?.removeEventListener?.("devicechange", this._onDeviceChange);
     }
   }
 }
