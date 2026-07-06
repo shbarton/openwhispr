@@ -13,6 +13,11 @@
       "description": "Notizen und Transkripte automatisch als Dateien auf der Festplatte speichern, nach Ordner sortiert",
       "path": "Speicherort",
       "changePath": "Speicherort ändern",
+      "template": "Vorlagedatei",
+      "templateDescription": "Optional. Wenn gesetzt, wird jede Notiz durch diese Markdown-Vorlage gerendert (Variablen: title, transcript, date, time, recorded_at, duration, participants, folder, type, id, slug, audio_path, audio_filename) und als eigenständige Datei gespeichert.",
+      "templateChoose": "Auswählen …",
+      "templateChange": "Ändern",
+      "templateClear": "Löschen",
       "rebuild": "Alle Dateien neu erstellen",
       "rebuildDescription": "Alle Notizen und Transkripte erneut auf die Festplatte synchronisieren",
       "rebuildError": {
@@ -23,7 +28,11 @@
     "meeting": {
       "speakerDetection": {
         "title": "Sprecher erkennen und beschriften",
-        "description": "Wenn deaktiviert, zeigen Transkripte „Du“ und „Andere“"
+        "description": "Wenn deaktiviert, zeigen Transkripte „Du” und „Andere”"
+      },
+      "defaultFolder": {
+        "title": "Standard-Meeting-Ordner",
+        "description": "Wohin automatisch erkannte Meetings abgelegt werden. Sie können dies auch über das Ordnermenü in Notizen festlegen."
       }
     }
   },
@@ -273,6 +282,9 @@
       "dataRetentionDisabled": "Datenaufbewahrung ist deaktiviert. Transkriptionen und Audio werden nicht im Verlauf gespeichert.",
       "press": "Drücken Sie",
       "toStart": "zum Starten",
+      "searchPlaceholder": "Transkripte suchen",
+      "clearSearch": "Suche löschen",
+      "noMatches": "Keine Transkripte entsprechen \"{{query}}\".",
       "dateGroups": {
         "today": "Heute",
         "yesterday": "Gestern"
@@ -1257,7 +1269,11 @@
         "startPositionDescription": "Wo das Sprachrekorder-Panel auf dem Bildschirm erscheint",
         "bottomRight": "Unten rechts",
         "center": "Unten Mitte",
-        "bottomLeft": "Unten links"
+        "bottomLeft": "Unten links",
+        "snoozeStatusLabel": "Diktierleiste ausgeblendet",
+        "snoozeHiddenUntil": "Ausgeblendet bis {{time}}. Diktat funktioniert weiterhin – die Leiste erscheint nur während der Aufnahme.",
+        "snoozeHiddenAlways": "Ausgeblendet, bis Sie es wieder einschalten. Diktat funktioniert weiterhin – die Leiste erscheint nur während der Aufnahme.",
+        "snoozeShowNow": "Jetzt anzeigen"
       },
       "hotkey": {
         "activationMode": "Aktivierungsmodus",
@@ -1738,7 +1754,10 @@
       "deleteTitle": "Ordner löschen?",
       "deleteDescription": "Dadurch werden \"{{name}}\" und {{count}} enthaltene Notiz(en) dauerhaft gelöscht. Diese Aktion kann nicht rückgängig gemacht werden.",
       "deleteDescriptionEmpty": "Dadurch wird \"{{name}}\" dauerhaft gelöscht. Diese Aktion kann nicht rückgängig gemacht werden.",
-      "deleteConfirm": "Ordner und Notizen löschen"
+      "deleteConfirm": "Ordner und Notizen löschen",
+      "setMeetingDefault": "Meetings landen hier",
+      "unsetMeetingDefault": "Meetings nicht hierher leiten",
+      "meetingDefaultBadge": "Meetings landen hier"
     },
     "list": {
       "title": "Notizen",
@@ -1755,6 +1774,7 @@
       "noteTitle": "Notiztitel",
       "stop": "Stopp",
       "transcribe": "Transkribieren",
+      "record": "Aufnehmen",
       "processing": "Verarbeitung...",
       "export": "Exportieren",
       "asMarkdown": "Als Markdown",
@@ -1774,7 +1794,8 @@
       "conversationWillAppear": "Gespräch wird hier angezeigt...",
       "linkedEvent": "Verknüpftes Ereignis",
       "noFolder": "Kein Ordner",
-      "participants": "Teilnehmer"
+      "participants": "Teilnehmer",
+      "diarizationFailed": "Sprechererkennung fehlgeschlagen – Transkript ohne Sprecher gespeichert"
     },
     "participants": {
       "attendee": "Teilnehmer",
@@ -1981,6 +2002,7 @@
   },
   "sidebar": {
     "home": "Startseite",
+    "dictation": "Diktat",
     "notes": "Notizen",
     "upload": "Hochladen",
     "dictionary": "Wörterbuch",
@@ -1997,6 +2019,22 @@
     "defaultUser": "Benutzer",
     "notSignedIn": "Nicht angemeldet",
     "chat": "Chat"
+  },
+  "dashboard": {
+    "greeting": {
+      "morning": "Guten Morgen.",
+      "morningWithName": "Guten Morgen, {{name}}.",
+      "afternoon": "Guten Tag.",
+      "afternoonWithName": "Guten Tag, {{name}}.",
+      "evening": "Guten Abend.",
+      "eveningWithName": "Guten Abend, {{name}}."
+    },
+    "upcomingMeetings": "Bevorstehende Meetings",
+    "recentTranscripts": "Aktuelle Transkripte",
+    "viewAll": "Alle anzeigen",
+    "noTranscripts": "Noch keine Transkripte",
+    "noUpcomingMeetings": "Keine bevorstehenden Meetings",
+    "connectCalendar": "Kalender verbinden"
   },
   "chat": {
     "newChat": "Neuer Chat",
@@ -2105,7 +2143,10 @@
     "commandMenu": {
       "stopListening": "Aufnahme beenden",
       "startListening": "Aufnahme starten",
-      "hideForNow": "Vorerst ausblenden"
+      "hideForNow": "Vorerst ausblenden",
+      "hideTenMinutes": "Für 10 Minuten ausblenden",
+      "hideOneHour": "Für 1 Stunde ausblenden",
+      "hideAlways": "Ausblenden, bis ich es wieder einschalte"
     }
   },
   "dictationAgent": {
@@ -2430,6 +2471,7 @@
   "embeddedChat": {
     "askPlaceholder": "Frag etwas...",
     "send": "Senden",
+    "stop": "Stopp",
     "title": "Chat",
     "emptyState": "Stelle eine Frage zu dieser Notiz",
     "dock": "In Seitenleiste andocken",

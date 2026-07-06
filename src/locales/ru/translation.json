@@ -13,6 +13,11 @@
       "description": "Автоматически сохранять заметки и транскрипции как файлы на диск с группировкой по папкам",
       "path": "Расположение",
       "changePath": "Изменить расположение",
+      "template": "Файл шаблона",
+      "templateDescription": "Необязательно. Если задан, каждая заметка отображается через этот Markdown-шаблон (переменные: title, transcript, date, time, recorded_at, duration, participants, folder, type, id, slug, audio_path, audio_filename) и сохраняется как отдельный самодостаточный файл.",
+      "templateChoose": "Выбрать…",
+      "templateChange": "Изменить",
+      "templateClear": "Очистить",
       "rebuild": "Пересоздать все файлы",
       "rebuildDescription": "Повторно синхронизировать все заметки и транскрипции на диск",
       "rebuildError": {
@@ -24,6 +29,10 @@
       "speakerDetection": {
         "title": "Распознавать и подписывать участников",
         "description": "Если выключено, в транскриптах отображаются «Вы» и «Другие»"
+      },
+      "defaultFolder": {
+        "title": "Папка встреч по умолчанию",
+        "description": "Куда помещаются автоматически обнаруженные встречи. Также можно задать из меню папок в разделе «Заметки»."
       }
     }
   },
@@ -273,6 +282,9 @@
       "dataRetentionDisabled": "Хранение данных отключено. Транскрипции и аудио не сохраняются в истории.",
       "press": "Нажмите",
       "toStart": "чтобы начать",
+      "searchPlaceholder": "Поиск транскриптов",
+      "clearSearch": "Очистить поиск",
+      "noMatches": "Ни один транскрипт не соответствует «{{query}}».",
       "dateGroups": {
         "today": "Сегодня",
         "yesterday": "Вчера"
@@ -1257,7 +1269,11 @@
         "startPositionDescription": "Где на экране появляется панель записи голоса",
         "bottomRight": "Внизу справа",
         "center": "Внизу по центру",
-        "bottomLeft": "Внизу слева"
+        "bottomLeft": "Внизу слева",
+        "snoozeStatusLabel": "Панель диктовки скрыта",
+        "snoozeHiddenUntil": "Скрыта до {{time}}. Диктовка по-прежнему работает — панель появляется только во время записи.",
+        "snoozeHiddenAlways": "Скрыта до тех пор, пока вы не включите её снова. Диктовка по-прежнему работает — панель появляется только во время записи.",
+        "snoozeShowNow": "Показать сейчас"
       },
       "hotkey": {
         "activationMode": "Режим активации",
@@ -1738,7 +1754,10 @@
       "deleteTitle": "Удалить папку?",
       "deleteDescription": "Это навсегда удалит «{{name}}» и {{count}} заметок в ней. Это действие нельзя отменить.",
       "deleteDescriptionEmpty": "Это навсегда удалит «{{name}}». Это действие нельзя отменить.",
-      "deleteConfirm": "Удалить папку и заметки"
+      "deleteConfirm": "Удалить папку и заметки",
+      "setMeetingDefault": "Встречи попадают сюда",
+      "unsetMeetingDefault": "Не направлять встречи сюда",
+      "meetingDefaultBadge": "Встречи попадают сюда"
     },
     "list": {
       "title": "Заметки",
@@ -1755,6 +1774,7 @@
       "noteTitle": "Название заметки",
       "stop": "Стоп",
       "transcribe": "Транскрибировать",
+      "record": "Записать",
       "processing": "Обработка...",
       "export": "Экспорт",
       "asMarkdown": "Как Markdown",
@@ -1774,7 +1794,8 @@
       "conversationWillAppear": "Разговор появится здесь...",
       "linkedEvent": "Связанное событие",
       "noFolder": "Без папки",
-      "participants": "Участники"
+      "participants": "Участники",
+      "diarizationFailed": "Определение говорящих не удалось — транскрипт сохранён без идентификации участников"
     },
     "participants": {
       "attendee": "участник",
@@ -1983,6 +2004,7 @@
   },
   "sidebar": {
     "home": "Главная",
+    "dictation": "Диктовка",
     "notes": "Заметки",
     "upload": "Загрузить",
     "dictionary": "Словарь",
@@ -1999,6 +2021,22 @@
     "defaultUser": "Пользователь",
     "notSignedIn": "Не авторизован",
     "chat": "Чат"
+  },
+  "dashboard": {
+    "greeting": {
+      "morning": "Доброе утро.",
+      "morningWithName": "Доброе утро, {{name}}.",
+      "afternoon": "Добрый день.",
+      "afternoonWithName": "Добрый день, {{name}}.",
+      "evening": "Добрый вечер.",
+      "eveningWithName": "Добрый вечер, {{name}}."
+    },
+    "upcomingMeetings": "Предстоящие встречи",
+    "recentTranscripts": "Последние транскрипты",
+    "viewAll": "Показать все",
+    "noTranscripts": "Транскриптов пока нет",
+    "noUpcomingMeetings": "Предстоящих встреч нет",
+    "connectCalendar": "Подключить календарь"
   },
   "chat": {
     "newChat": "Новый чат",
@@ -2107,7 +2145,10 @@
     "commandMenu": {
       "stopListening": "Остановить запись",
       "startListening": "Начать запись",
-      "hideForNow": "Скрыть"
+      "hideForNow": "Скрыть",
+      "hideTenMinutes": "Скрыть на 10 минут",
+      "hideOneHour": "Скрыть на 1 час",
+      "hideAlways": "Скрыть до тех пор, пока я не включу снова"
     }
   },
   "dictationAgent": {
@@ -2432,6 +2473,7 @@
   "embeddedChat": {
     "askPlaceholder": "Спросите что-нибудь...",
     "send": "Отправить",
+    "stop": "Стоп",
     "title": "Чат",
     "emptyState": "Задайте вопрос об этой заметке",
     "dock": "Закрепить на боковой панели",

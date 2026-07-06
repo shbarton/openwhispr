@@ -13,6 +13,11 @@
       "description": "自动将笔记和转录保存为文件���磁盘，按文件夹分类",
       "path": "保存位置",
       "changePath": "更改位置",
+      "template": "模板文件",
+      "templateDescription": "可选。设置后，每条笔记将通过此 Markdown 模板渲染（变量：title、transcript、date、time、recorded_at、duration、participants、folder、type、id、slug、audio_path、audio_filename），并保存为独立的自完备文件。",
+      "templateChoose": "选择…",
+      "templateChange": "更改",
+      "templateClear": "清除",
       "rebuild": "重建所有文件",
       "rebuildDescription": "将所有笔记和转录重新同步到磁盘",
       "rebuildError": {
@@ -24,6 +29,10 @@
       "speakerDetection": {
         "title": "识别并标记发言者",
         "description": "关闭后，转写会显示\"你\"和\"其他人\""
+      },
+      "defaultFolder": {
+        "title": "默认会议文件夹",
+        "description": "自动检测到的会议存放的位置。也可以在笔记的文件夹菜单中设置。"
       }
     }
   },
@@ -273,6 +282,9 @@
       "dataRetentionDisabled": "数据保留已关闭。转录和音频不会保存到历史记录。",
       "press": "按下",
       "toStart": "开始",
+      "searchPlaceholder": "搜索转写内容",
+      "clearSearch": "清除搜索",
+      "noMatches": "没有与「{{query}}」匹配的转写内容。",
       "dateGroups": {
         "today": "今天",
         "yesterday": "昨天"
@@ -1252,7 +1264,11 @@
         "startPositionDescription": "语音录制面板在屏幕上的显示位置",
         "bottomRight": "右下角",
         "center": "底部居中",
-        "bottomLeft": "左下角"
+        "bottomLeft": "左下角",
+        "snoozeStatusLabel": "听写栏已隐藏",
+        "snoozeHiddenUntil": "隐藏至 {{time}}。听写仍然可用——仅在录音时显示工具栏。",
+        "snoozeHiddenAlways": "隐藏直到你重新开启。听写仍然可用——仅在录音时显示工具栏。",
+        "snoozeShowNow": "立即显示"
       },
       "hotkey": {
         "activationMode": "激活模式",
@@ -1733,7 +1749,10 @@
       "deleteTitle": "删除文件夹？",
       "deleteDescription": "这将永久删除「{{name}}」及其 {{count}} 条笔记。此操作无法撤销。",
       "deleteDescriptionEmpty": "这将永久删除「{{name}}」。此操作无法撤销。",
-      "deleteConfirm": "删除文件夹和笔记"
+      "deleteConfirm": "删除文件夹和笔记",
+      "setMeetingDefault": "会议将存放在此处",
+      "unsetMeetingDefault": "不将会议路由至此处",
+      "meetingDefaultBadge": "会议将存放在此处"
     },
     "list": {
       "title": "笔记",
@@ -1750,6 +1769,7 @@
       "noteTitle": "笔记标题",
       "stop": "停止",
       "transcribe": "转录",
+      "record": "录音",
       "processing": "处理中...",
       "export": "导出",
       "asMarkdown": "导出为 Markdown",
@@ -1769,7 +1789,8 @@
       "conversationWillAppear": "对话将显示在这里...",
       "linkedEvent": "关联日程",
       "noFolder": "无文件夹",
-      "participants": "参与者"
+      "participants": "参与者",
+      "diarizationFailed": "说话人检测失败——已在不含说话人信息的情况下保存转写"
     },
     "participants": {
       "attendee": "位参会者",
@@ -1976,6 +1997,7 @@
   },
   "sidebar": {
     "home": "首页",
+    "dictation": "听写",
     "notes": "笔记",
     "upload": "上传",
     "dictionary": "词典",
@@ -1992,6 +2014,22 @@
     "defaultUser": "用户",
     "notSignedIn": "未登录",
     "chat": "聊天"
+  },
+  "dashboard": {
+    "greeting": {
+      "morning": "早上好。",
+      "morningWithName": "早上好，{{name}}。",
+      "afternoon": "下午好。",
+      "afternoonWithName": "下午好，{{name}}。",
+      "evening": "晚上好。",
+      "eveningWithName": "晚上好，{{name}}。"
+    },
+    "upcomingMeetings": "即将到来的会议",
+    "recentTranscripts": "最近的转写",
+    "viewAll": "查看全部",
+    "noTranscripts": "暂无转写内容",
+    "noUpcomingMeetings": "没有即将到来的会议",
+    "connectCalendar": "连接日历"
   },
   "chat": {
     "newChat": "新对话",
@@ -2100,7 +2138,10 @@
     "commandMenu": {
       "stopListening": "停止录音",
       "startListening": "开始录音",
-      "hideForNow": "暂时隐藏"
+      "hideForNow": "暂时隐藏",
+      "hideTenMinutes": "隐藏 10 分钟",
+      "hideOneHour": "隐藏 1 小时",
+      "hideAlways": "隐藏直到我重新开启"
     }
   },
   "dictationAgent": {
@@ -2425,6 +2466,7 @@
   "embeddedChat": {
     "askPlaceholder": "随便问点什么...",
     "send": "发送",
+    "stop": "停止",
     "title": "聊天",
     "emptyState": "就这条笔记提个问题",
     "dock": "固定到侧边栏",

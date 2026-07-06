@@ -13,6 +13,11 @@
       "description": "Salvar notas e transcrições automaticamente como arquivos no disco, organizados por pasta",
       "path": "Local de salvamento",
       "changePath": "Alterar local",
+      "template": "Arquivo de modelo",
+      "templateDescription": "Opcional. Quando definido, cada nota é renderizada por meio deste modelo Markdown (variáveis: title, transcript, date, time, recorded_at, duration, participants, folder, type, id, slug, audio_path, audio_filename) e salva como um arquivo independente.",
+      "templateChoose": "Escolher…",
+      "templateChange": "Alterar",
+      "templateClear": "Limpar",
       "rebuild": "Reconstruir todos os arquivos",
       "rebuildDescription": "Ressincronizar todas as notas e transcrições no disco",
       "rebuildError": {
@@ -24,6 +29,10 @@
       "speakerDetection": {
         "title": "Identificar e rotular participantes",
         "description": "Quando desativado, as transcrições mostram \"Você\" e \"Outros\""
+      },
+      "defaultFolder": {
+        "title": "Pasta padrão de reuniões",
+        "description": "Onde as reuniões detectadas automaticamente são arquivadas. Você também pode definir isso no menu de pastas em Notas."
       }
     }
   },
@@ -245,6 +254,9 @@
       "dataRetentionDisabled": "A retenção de dados está desativada. Transcrições e áudio não são salvos no histórico.",
       "press": "Pressione",
       "toStart": "para iniciar",
+      "searchPlaceholder": "Pesquisar transcrições",
+      "clearSearch": "Limpar pesquisa",
+      "noMatches": "Nenhuma transcrição corresponde a \"{{query}}\".",
       "dateGroups": {
         "today": "Hoje",
         "yesterday": "Ontem"
@@ -1229,7 +1241,11 @@
         "startPositionDescription": "Onde o painel de gravação de voz aparece na tela",
         "bottomRight": "Inferior direito",
         "center": "Inferior central",
-        "bottomLeft": "Inferior esquerdo"
+        "bottomLeft": "Inferior esquerdo",
+        "snoozeStatusLabel": "Barra de ditado oculta",
+        "snoozeHiddenUntil": "Oculta até {{time}}. O ditado continua funcionando — a barra aparece apenas durante a gravação.",
+        "snoozeHiddenAlways": "Oculta até você reativá-la. O ditado continua funcionando — a barra aparece apenas durante a gravação.",
+        "snoozeShowNow": "Mostrar agora"
       },
       "hotkey": {
         "activationMode": "Modo de ativação",
@@ -1738,7 +1754,10 @@
       "deleteTitle": "Excluir pasta?",
       "deleteDescription": "Isso excluirá permanentemente \"{{name}}\" e suas {{count}} nota(s). Esta ação não pode ser desfeita.",
       "deleteDescriptionEmpty": "Isso excluirá permanentemente \"{{name}}\". Esta ação não pode ser desfeita.",
-      "deleteConfirm": "Excluir pasta e notas"
+      "deleteConfirm": "Excluir pasta e notas",
+      "setMeetingDefault": "As reuniões ficam aqui",
+      "unsetMeetingDefault": "Não redirecionar reuniões aqui",
+      "meetingDefaultBadge": "As reuniões ficam aqui"
     },
     "list": {
       "title": "Notas",
@@ -1755,6 +1774,7 @@
       "noteTitle": "Título da nota",
       "stop": "Parar",
       "transcribe": "Transcrever",
+      "record": "Gravar",
       "processing": "Processando...",
       "export": "Exportar",
       "asMarkdown": "Como Markdown",
@@ -1774,7 +1794,8 @@
       "conversationWillAppear": "A conversa aparecerá aqui...",
       "linkedEvent": "Evento vinculado",
       "noFolder": "Sem pasta",
-      "participants": "Participantes"
+      "participants": "Participantes",
+      "diarizationFailed": "Falha na detecção de falantes — transcrição salva sem identificação de falantes"
     },
     "participants": {
       "attendee": "participante",
@@ -1981,6 +2002,7 @@
   },
   "sidebar": {
     "home": "Início",
+    "dictation": "Ditado",
     "notes": "Notas",
     "upload": "Enviar",
     "dictionary": "Dicionário",
@@ -1997,6 +2019,22 @@
     "defaultUser": "Usuário",
     "notSignedIn": "Não conectado",
     "chat": "Chat"
+  },
+  "dashboard": {
+    "greeting": {
+      "morning": "Bom dia.",
+      "morningWithName": "Bom dia, {{name}}.",
+      "afternoon": "Boa tarde.",
+      "afternoonWithName": "Boa tarde, {{name}}.",
+      "evening": "Boa noite.",
+      "eveningWithName": "Boa noite, {{name}}."
+    },
+    "upcomingMeetings": "Próximas reuniões",
+    "recentTranscripts": "Transcrições recentes",
+    "viewAll": "Ver tudo",
+    "noTranscripts": "Ainda sem transcrições",
+    "noUpcomingMeetings": "Nenhuma reunião próxima",
+    "connectCalendar": "Conectar um calendário"
   },
   "chat": {
     "newChat": "Novo chat",
@@ -2105,7 +2143,10 @@
     "commandMenu": {
       "stopListening": "Parar de ouvir",
       "startListening": "Começar a ouvir",
-      "hideForNow": "Ocultar por agora"
+      "hideForNow": "Ocultar por agora",
+      "hideTenMinutes": "Ocultar por 10 minutos",
+      "hideOneHour": "Ocultar por 1 hora",
+      "hideAlways": "Ocultar até eu reativar"
     }
   },
   "dictationAgent": {
@@ -2430,6 +2471,7 @@
   "embeddedChat": {
     "askPlaceholder": "Pergunte algo...",
     "send": "Enviar",
+    "stop": "Parar",
     "title": "Chat",
     "emptyState": "Faça uma pergunta sobre esta nota",
     "dock": "Fixar na barra lateral",

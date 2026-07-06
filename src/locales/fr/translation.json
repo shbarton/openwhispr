@@ -13,6 +13,11 @@
       "description": "Enregistrer automatiquement les notes et transcriptions en fichiers sur le disque, organisés par dossier",
       "path": "Emplacement de sauvegarde",
       "changePath": "Changer l'emplacement",
+      "template": "Fichier modèle",
+      "templateDescription": "Facultatif. Quand défini, chaque note est rendue via ce modèle Markdown (variables : title, transcript, date, time, recorded_at, duration, participants, folder, type, id, slug, audio_path, audio_filename) et enregistrée en fichier autonome.",
+      "templateChoose": "Choisir…",
+      "templateChange": "Modifier",
+      "templateClear": "Effacer",
       "rebuild": "Reconstruire tous les fichiers",
       "rebuildDescription": "Resynchroniser toutes les notes et transcriptions sur le disque",
       "rebuildError": {
@@ -24,6 +29,10 @@
       "speakerDetection": {
         "title": "Identifier et étiqueter les intervenants",
         "description": "Lorsque désactivé, les transcriptions affichent « Vous » et « Autres »"
+      },
+      "defaultFolder": {
+        "title": "Dossier de réunion par défaut",
+        "description": "Où sont classées les réunions détectées automatiquement. Vous pouvez aussi le définir depuis le menu de dossiers dans Notes."
       }
     }
   },
@@ -273,6 +282,9 @@
       "dataRetentionDisabled": "La conservation des données est désactivée. Les transcriptions et l'audio ne sont pas sauvegardés dans l'historique.",
       "press": "Appuyez sur",
       "toStart": "pour démarrer",
+      "searchPlaceholder": "Rechercher des transcriptions",
+      "clearSearch": "Effacer la recherche",
+      "noMatches": "Aucune transcription ne correspond à « {{query}} ».",
       "dateGroups": {
         "today": "Aujourd'hui",
         "yesterday": "Hier"
@@ -1305,7 +1317,11 @@
         "startPositionDescription": "Emplacement du panneau d'enregistrement vocal à l'écran",
         "bottomRight": "En bas à droite",
         "center": "En bas au centre",
-        "bottomLeft": "En bas à gauche"
+        "bottomLeft": "En bas à gauche",
+        "snoozeStatusLabel": "Barre de dictée masquée",
+        "snoozeHiddenUntil": "Masquée jusqu'à {{time}}. La dictée fonctionne toujours — la barre n'apparaît que pendant l'enregistrement.",
+        "snoozeHiddenAlways": "Masquée jusqu'à ce que vous la réactiviez. La dictée fonctionne toujours — la barre n'apparaît que pendant l'enregistrement.",
+        "snoozeShowNow": "Afficher maintenant"
       },
       "hotkey": {
         "activationMode": "Mode d'activation",
@@ -1700,6 +1716,7 @@
   },
   "sidebar": {
     "home": "Accueil",
+    "dictation": "Dictée",
     "notes": "Notes",
     "upload": "Importer",
     "dictionary": "Dictionnaire",
@@ -1716,6 +1733,22 @@
     "defaultUser": "Utilisateur",
     "notSignedIn": "Non connecté",
     "chat": "Chat"
+  },
+  "dashboard": {
+    "greeting": {
+      "morning": "Bonjour.",
+      "morningWithName": "Bonjour, {{name}}.",
+      "afternoon": "Bon après-midi.",
+      "afternoonWithName": "Bon après-midi, {{name}}.",
+      "evening": "Bonsoir.",
+      "eveningWithName": "Bonsoir, {{name}}."
+    },
+    "upcomingMeetings": "Réunions à venir",
+    "recentTranscripts": "Transcriptions récentes",
+    "viewAll": "Voir tout",
+    "noTranscripts": "Aucune transcription pour l'instant",
+    "noUpcomingMeetings": "Aucune réunion à venir",
+    "connectCalendar": "Connecter un calendrier"
   },
   "chat": {
     "newChat": "Nouveau chat",
@@ -1847,7 +1880,10 @@
       "deleteTitle": "Supprimer le dossier ?",
       "deleteDescription": "Cette action supprimera définitivement \"{{name}}\" et ses {{count}} note(s). Cette action est irréversible.",
       "deleteDescriptionEmpty": "Cette action supprimera définitivement \"{{name}}\". Cette action est irréversible.",
-      "deleteConfirm": "Supprimer le dossier et les notes"
+      "deleteConfirm": "Supprimer le dossier et les notes",
+      "setMeetingDefault": "Les réunions atterrissent ici",
+      "unsetMeetingDefault": "Ne pas rediriger les réunions ici",
+      "meetingDefaultBadge": "Les réunions atterrissent ici"
     },
     "list": {
       "title": "Notes",
@@ -1864,6 +1900,7 @@
       "noteTitle": "Titre de la note",
       "stop": "Arrêter",
       "transcribe": "Transcrire",
+      "record": "Enregistrer",
       "processing": "Traitement...",
       "export": "Exporter",
       "asMarkdown": "En Markdown",
@@ -1883,7 +1920,8 @@
       "conversationWillAppear": "La conversation apparaîtra ici...",
       "linkedEvent": "Événement lié",
       "noFolder": "Aucun dossier",
-      "participants": "Participants"
+      "participants": "Participants",
+      "diarizationFailed": "Échec de la détection des intervenants — transcription enregistrée sans intervenants"
     },
     "participants": {
       "attendee": "participant",
@@ -2153,7 +2191,10 @@
     "commandMenu": {
       "stopListening": "Arrêter l’écoute",
       "startListening": "Commencer l’écoute",
-      "hideForNow": "Masquer pour l’instant"
+      "hideForNow": "Masquer pour l’instant",
+      "hideTenMinutes": "Masquer pendant 10 minutes",
+      "hideOneHour": "Masquer pendant 1 heure",
+      "hideAlways": "Masquer jusqu’à ce que je le réactive"
     }
   },
   "dictationAgent": {
@@ -2430,6 +2471,7 @@
   "embeddedChat": {
     "askPlaceholder": "Posez une question...",
     "send": "Envoyer",
+    "stop": "Arrêter",
     "title": "Chat",
     "emptyState": "Posez une question sur cette note",
     "dock": "Ancrer dans la barre latérale",

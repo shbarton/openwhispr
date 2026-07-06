@@ -13,6 +13,11 @@
       "description": "自動將筆記和逐字稿儲存為檔案到磁碟，按資料夾分類",
       "path": "儲存位置",
       "changePath": "變更位置",
+      "template": "範本檔案",
+      "templateDescription": "選填。設定後，每則筆記將透過此 Markdown 範本轉譯（變數：title、transcript、date、time、recorded_at、duration、participants、folder、type、id、slug、audio_path、audio_filename），並儲存為獨立的自完備檔案。",
+      "templateChoose": "選擇…",
+      "templateChange": "變更",
+      "templateClear": "清除",
       "rebuild": "重建所有檔案",
       "rebuildDescription": "將所有筆記和逐字稿重新同步到磁碟",
       "rebuildError": {
@@ -24,6 +29,10 @@
       "speakerDetection": {
         "title": "辨識並標記發言者",
         "description": "關閉後，逐字稿會顯示「你」和「其他人」"
+      },
+      "defaultFolder": {
+        "title": "預設會議資料夾",
+        "description": "自動偵測到的會議存放的位置。也可以在筆記的資料夾選單中設定。"
       }
     }
   },
@@ -273,6 +282,9 @@
       "dataRetentionDisabled": "資料保留已關閉。轉錄和音訊不會儲存至歷史記錄。",
       "press": "按下",
       "toStart": "開始",
+      "searchPlaceholder": "搜尋逐字稿",
+      "clearSearch": "清除搜尋",
+      "noMatches": "沒有與「{{query}}」相符的逐字稿。",
       "dateGroups": {
         "today": "今天",
         "yesterday": "昨天"
@@ -1252,7 +1264,11 @@
         "startPositionDescription": "語音錄製面板在螢幕上的顯示位置",
         "bottomRight": "右下角",
         "center": "底部置中",
-        "bottomLeft": "左下角"
+        "bottomLeft": "左下角",
+        "snoozeStatusLabel": "聽寫列已隱藏",
+        "snoozeHiddenUntil": "隱藏至 {{time}}。聽寫仍然可用——僅在錄音時顯示工具列。",
+        "snoozeHiddenAlways": "隱藏直到你重新開啟。聽寫仍然可用——僅在錄音時顯示工具列。",
+        "snoozeShowNow": "立即顯示"
       },
       "hotkey": {
         "activationMode": "啟用模式",
@@ -1733,7 +1749,10 @@
       "deleteTitle": "刪除資料夾？",
       "deleteDescription": "這將永久刪除「{{name}}」及其 {{count}} 則筆記。此操作無法復原。",
       "deleteDescriptionEmpty": "這將永久刪除「{{name}}」。此操作無法復原。",
-      "deleteConfirm": "刪除資料夾和筆記"
+      "deleteConfirm": "刪除資料夾和筆記",
+      "setMeetingDefault": "會議將存放在此處",
+      "unsetMeetingDefault": "不將會議路由至此處",
+      "meetingDefaultBadge": "會議將存放在此處"
     },
     "list": {
       "title": "筆記",
@@ -1750,6 +1769,7 @@
       "noteTitle": "筆記標題",
       "stop": "停止",
       "transcribe": "轉錄",
+      "record": "錄音",
       "processing": "處理中...",
       "export": "匯出",
       "asMarkdown": "匯出為 Markdown",
@@ -1769,7 +1789,8 @@
       "conversationWillAppear": "對話將顯示在這裡...",
       "linkedEvent": "關聯行程",
       "noFolder": "無資料夾",
-      "participants": "參與者"
+      "participants": "參與者",
+      "diarizationFailed": "說話者偵測失敗——已在不含說話者資訊的情況下儲存逐字稿"
     },
     "participants": {
       "attendee": "位與會者",
@@ -1976,6 +1997,7 @@
   },
   "sidebar": {
     "home": "首頁",
+    "dictation": "聽寫",
     "notes": "筆記",
     "upload": "上傳",
     "dictionary": "字典",
@@ -1992,6 +2014,22 @@
     "defaultUser": "使用者",
     "notSignedIn": "尚未登入",
     "chat": "聊天"
+  },
+  "dashboard": {
+    "greeting": {
+      "morning": "早安。",
+      "morningWithName": "早安，{{name}}。",
+      "afternoon": "午安。",
+      "afternoonWithName": "午安，{{name}}。",
+      "evening": "晚安。",
+      "eveningWithName": "晚安，{{name}}。"
+    },
+    "upcomingMeetings": "即將到來的會議",
+    "recentTranscripts": "最近的逐字稿",
+    "viewAll": "查看全部",
+    "noTranscripts": "尚無逐字稿",
+    "noUpcomingMeetings": "沒有即將到來的會議",
+    "connectCalendar": "連結日曆"
   },
   "chat": {
     "newChat": "新對話",
@@ -2100,7 +2138,10 @@
     "commandMenu": {
       "stopListening": "停止錄音",
       "startListening": "開始錄音",
-      "hideForNow": "暫時隱藏"
+      "hideForNow": "暫時隱藏",
+      "hideTenMinutes": "隱藏 10 分鐘",
+      "hideOneHour": "隱藏 1 小時",
+      "hideAlways": "隱藏直到我重新開啟"
     }
   },
   "dictationAgent": {
@@ -2425,6 +2466,7 @@
   "embeddedChat": {
     "askPlaceholder": "隨便問點什麼...",
     "send": "傳送",
+    "stop": "停止",
     "title": "聊天",
     "emptyState": "就這條筆記提個問題",
     "dock": "固定到側邊欄",

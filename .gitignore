@@ -318,3 +318,6 @@ src/assets/Assets.car
 
 # Compiled meeting-detection probe (build from tools/meeting-detection-probe.swift)
 tools/meeting-detection-probe
+
+# here-now publish state (local tool artifact)
+.herenow/

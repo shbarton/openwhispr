@@ -13,6 +13,11 @@
       "description": "ノートと文字起こしをファイルとしてディスクに自動保存し、フォルダごとに整理",
       "path": "保存先",
       "changePath": "保存先を変更",
+      "template": "テンプレートファイル",
+      "templateDescription": "省略可能。設定すると、各ノートがこの Markdown テンプレートで描画されます（変数：title, transcript, date, time, recorded_at, duration, participants, folder, type, id, slug, audio_path, audio_filename）。単一の自己完結ファイルとして保存されます。",
+      "templateChoose": "選択…",
+      "templateChange": "変更",
+      "templateClear": "クリア",
       "rebuild": "すべてのファイルを再構築",
       "rebuildDescription": "すべてのノートと文字起こしをディスクに再同期",
       "rebuildError": {
@@ -24,6 +29,10 @@
       "speakerDetection": {
         "title": "話者を識別してラベル付け",
         "description": "オフにすると、文字起こしには「あなた」と「他の人」と表示されます"
+      },
+      "defaultFolder": {
+        "title": "デフォルトの会議フォルダ",
+        "description": "自動検出された会議の保存先フォルダです。ノートのフォルダメニューからも設定できます。"
       }
     }
   },
@@ -273,6 +282,9 @@
       "dataRetentionDisabled": "データ保持が無効です。文字起こしと音声は履歴に保存されません。",
       "press": "押してください",
       "toStart": "開始するには",
+      "searchPlaceholder": "文字起こしを検索",
+      "clearSearch": "検索をクリア",
+      "noMatches": "「{{query}}」に一致する文字起こしはありません。",
       "dateGroups": {
         "today": "今日",
         "yesterday": "昨日"
@@ -1257,7 +1269,11 @@
         "startPositionDescription": "音声レコーダーパネルが画面上に表示される位置",
         "bottomRight": "右下",
         "center": "下中央",
-        "bottomLeft": "左下"
+        "bottomLeft": "左下",
+        "snoozeStatusLabel": "ディクテーションバー非表示中",
+        "snoozeHiddenUntil": "{{time}} まで非表示です。ディクテーションは引き続き機能します — バーは録音中のみ表示されます。",
+        "snoozeHiddenAlways": "再び有効にするまで非表示です。ディクテーションは引き続き機能します — バーは録音中のみ表示されます。",
+        "snoozeShowNow": "今すぐ表示"
       },
       "hotkey": {
         "activationMode": "起動モード",
@@ -1658,6 +1674,7 @@
     },
     "editor": {
       "transcribe": "文字起こし",
+      "record": "録音",
       "staleIndicator": "強化後にコンテンツが変更されました",
       "live": "ライブ",
       "transcript": "文字起こし",
@@ -1666,6 +1683,7 @@
       "linkedEvent": "リンクされたイベント",
       "noFolder": "フォルダなし",
       "participants": "参加者",
+      "diarizationFailed": "話者検出に失敗しました — 話者なしで文字起こしを保存しました",
       "untitled": "無題",
       "noteTitle": "ノートのタイトル",
       "stop": "停止",
@@ -1755,7 +1773,10 @@
       "deleteTitle": "フォルダを削除しますか？",
       "deleteDescription": "「{{name}}」と {{count}} 件のノートを完全に削除します。この操作は取り消せません。",
       "deleteDescriptionEmpty": "「{{name}}」を完全に削除します。この操作は取り消せません。",
-      "deleteConfirm": "フォルダとノートを削除"
+      "deleteConfirm": "フォルダとノートを削除",
+      "setMeetingDefault": "会議はここに追加されます",
+      "unsetMeetingDefault": "会議をここに追加しない",
+      "meetingDefaultBadge": "会議はここに追加されます"
     },
     "list": {
       "title": "ノート",
@@ -1981,6 +2002,7 @@
   },
   "sidebar": {
     "home": "ホーム",
+    "dictation": "ディクテーション",
     "notes": "ノート",
     "upload": "アップロード",
     "dictionary": "辞書",
@@ -1997,6 +2019,22 @@
     "defaultUser": "ユーザー",
     "notSignedIn": "未サインイン",
     "chat": "チャット"
+  },
+  "dashboard": {
+    "greeting": {
+      "morning": "おはようございます。",
+      "morningWithName": "おはようございます、{{name}}。",
+      "afternoon": "こんにちは。",
+      "afternoonWithName": "こんにちは、{{name}}。",
+      "evening": "こんばんは。",
+      "eveningWithName": "こんばんは、{{name}}。"
+    },
+    "upcomingMeetings": "予定の会議",
+    "recentTranscripts": "最近の文字起こし",
+    "viewAll": "すべて表示",
+    "noTranscripts": "まだ文字起こしはありません",
+    "noUpcomingMeetings": "予定の会議はありません",
+    "connectCalendar": "カレンダーを接続"
   },
   "chat": {
     "newChat": "新しいチャット",
@@ -2105,7 +2143,10 @@
     "commandMenu": {
       "stopListening": "録音を停止",
       "startListening": "録音を開始",
-      "hideForNow": "一時的に非表示"
+      "hideForNow": "一時的に非表示",
+      "hideTenMinutes": "10分間非表示",
+      "hideOneHour": "1時間非表示",
+      "hideAlways": "再び有効にするまで非表示"
     }
   },
   "dictationAgent": {
@@ -2430,6 +2471,7 @@
   "embeddedChat": {
     "askPlaceholder": "何でも聞いてください...",
     "send": "送信",
+    "stop": "停止",
     "title": "チャット",
     "emptyState": "このノートについて質問してください",
     "dock": "サイドバーに固定",
