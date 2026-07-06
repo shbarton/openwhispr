@@ -150,7 +150,11 @@ export default function ControlPanel() {
         skipRebuild: true,
       });
       if (noteFilesTemplatePath) {
-        await window.electronAPI?.noteFilesSetTemplatePath?.(noteFilesTemplatePath);
+        // skipRebuild: this is a restore of persisted state, not a template
+        // change — rebuilding here rewrote every vault file on every launch.
+        await window.electronAPI?.noteFilesSetTemplatePath?.(noteFilesTemplatePath, {
+          skipRebuild: true,
+        });
       }
     })();
   }, []);

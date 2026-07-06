@@ -976,6 +976,11 @@ class DatabaseManager {
       if (!this.db) throw new Error("Database not initialized");
       const trimmed = (name || "").trim();
       if (!trimmed) return { success: false, error: "Folder name is required" };
+      // Folder names become on-disk directory names under the note-files base
+      // path — separators or ".." would resolve outside it.
+      if (/[/\\]/.test(trimmed) || trimmed === ".." || trimmed.includes("..")) {
+        return { success: false, error: "Folder name cannot contain path separators" };
+      }
       const existing = this.db.prepare("SELECT id FROM folders WHERE name = ?").get(trimmed);
       if (existing) return { success: false, error: "A folder with that name already exists" };
       const maxOrder = this.db.prepare("SELECT MAX(sort_order) as max_order FROM folders").get();
@@ -1030,6 +1035,10 @@ class DatabaseManager {
       if (folder.is_default) return { success: false, error: "Cannot rename default folders" };
       const trimmed = (name || "").trim();
       if (!trimmed) return { success: false, error: "Folder name is required" };
+      // Same rule as createFolder: names become on-disk directory names.
+      if (/[/\\]/.test(trimmed) || trimmed === ".." || trimmed.includes("..")) {
+        return { success: false, error: "Folder name cannot contain path separators" };
+      }
       const existing = this.db
         .prepare("SELECT id FROM folders WHERE name = ? AND id != ?")
         .get(trimmed, id);

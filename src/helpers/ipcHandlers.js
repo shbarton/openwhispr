@@ -492,8 +492,20 @@ class IPCHandlers {
         try {
           fs.renameSync(src, dst);
         } catch {
-          fs.copyFileSync(src, dst);
-          fs.unlinkSync(src);
+          // Cross-filesystem fallback. Guard per file so one failure doesn't
+          // abort the rest of the move; a copy that lands but fails to unlink
+          // leaves a harmless duplicate at the source.
+          try {
+            fs.copyFileSync(src, dst);
+            fs.unlinkSync(src);
+          } catch (moveErr) {
+            debugLogger.error(
+              "Failed to move mirror file; leaving it in place",
+              { file, error: moveErr.message },
+              "note-files"
+            );
+            continue;
+          }
         }
         moved++;
       }
@@ -1200,7 +1212,11 @@ class IPCHandlers {
     ipcMain.handle("db-set-folder-path", async (event, id, newPath, moveExisting = false) => {
       const before = this.databaseManager.getFolders().find((f) => f.id === id);
       const oldDir = before ? this._resolveFolderDir(before) : null;
-      const result = this.databaseManager.setFolderPath(id, newPath ?? null);
+      // The Settings text input lets users type paths by hand; fs treats a
+      // literal `~` as a directory name, so expand it here.
+      const expandedPath =
+        typeof newPath === "string" ? newPath.replace(/^~(?=$|[/\\])/, os.homedir()) : newPath;
+      const result = this.databaseManager.setFolderPath(id, expandedPath ?? null);
       let moved = 0;
       if (result?.success) {
         const newDir = this._resolveFolderDir(result.folder);
@@ -1403,6 +1419,9 @@ class IPCHandlers {
       this.databaseManager.getPendingFolderDeletes()
     );
     ipcMain.handle("db-hard-delete-folder", (_, id) => {
+      const folder = this._noteFilesEnabled
+        ? this.databaseManager.getFolders().find((f) => f.id === id)
+        : null;
       const result = this.databaseManager.hardDeleteFolder(id);
       if (result?.success) {
         for (const noteId of result.noteIds ?? []) {
@@ -1412,7 +1431,16 @@ class IPCHandlers {
           this.broadcastToWindows("folder-deleted", { id });
           if (this._noteFilesEnabled && result.name) {
             const markdownMirror = require("./markdownMirror");
-            markdownMirror.deleteFolder(result.name);
+            // Precise per-note deletion, same as db-delete-folder — never a
+            // recursive rm: the folder's dir (or a same-named dir under the
+            // base path) may be a user-owned vault location holding other
+            // content. Keep the deleted folder's dir registered for the globs.
+            if (folder) this._refreshMirrorFolderDirs(folder);
+            for (const noteId of result.noteIds ?? []) {
+              markdownMirror.deleteNote(noteId);
+            }
+            markdownMirror.removeFolderDirIfEmpty(folder?.name ?? result.name);
+            this._refreshMirrorFolderDirs();
           }
         });
       }
@@ -7946,11 +7974,13 @@ class IPCHandlers {
       }
     });
 
-    ipcMain.handle("note-files-set-template-path", async (_event, templatePath) => {
+    ipcMain.handle("note-files-set-template-path", async (_event, templatePath, options) => {
       try {
         const markdownMirror = require("./markdownMirror");
         markdownMirror.setTemplatePath(templatePath || "");
-        if (this._noteFilesEnabled) this._rebuildMirror();
+        // skipRebuild: startup restore re-applies the persisted template path;
+        // rebuilding there would rewrite every vault file on every launch.
+        if (this._noteFilesEnabled && !options?.skipRebuild) this._rebuildMirror();
         return { success: true };
       } catch (error) {
         debugLogger.error(

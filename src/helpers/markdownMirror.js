@@ -1,5 +1,6 @@
 const fs = require("fs");
 const path = require("path");
+const crypto = require("crypto");
 const debugLogger = require("./debugLogger");
 
 class MarkdownMirror {
@@ -11,6 +12,13 @@ class MarkdownMirror {
     // ipcHandlers (folder.path ?? <base>/<name>). Lets the mirror write to and
     // glob across folders that live outside the base path.
     this._folderDirs = {};
+    // { [key]: sha256 } of the content this mirror last wrote per note
+    // (`"<id>"`) / transcript sidecar (`"<id>:transcript"`). Lives in userData,
+    // not the vault. Lets writes detect files edited outside the app and
+    // refuse to clobber them.
+    this._hashes = null;
+    this._hashStorePath = undefined;
+    this._hashSaveQueued = false;
   }
 
   init(basePath) {
@@ -54,6 +62,141 @@ class MarkdownMirror {
       if (dir) dirs.add(dir);
     }
     return [...dirs];
+  }
+
+  // ---- Write safety --------------------------------------------------------
+  // Vault files are user data that may also be edited directly (Calyx /
+  // Obsidian). Three protections: writes are atomic (a crash can't truncate a
+  // file), a file edited outside the app since our last write is never
+  // overwritten, and content of unknown provenance is backed up app-side
+  // before the first overwrite or any unlink.
+
+  _sha256(content) {
+    return crypto.createHash("sha256").update(content, "utf8").digest("hex");
+  }
+
+  _atomicWrite(filePath, content) {
+    const tmpPath = `${filePath}.tmp`;
+    fs.writeFileSync(tmpPath, content, "utf-8");
+    fs.renameSync(tmpPath, filePath);
+  }
+
+  _resolveHashStorePath() {
+    if (this._hashStorePath !== undefined) return this._hashStorePath;
+    try {
+      const { app } = require("electron");
+      this._hashStorePath = path.join(app.getPath("userData"), "mirror-hashes.json");
+    } catch {
+      this._hashStorePath = null;
+    }
+    return this._hashStorePath;
+  }
+
+  _loadHashes() {
+    if (this._hashes) return this._hashes;
+    this._hashes = {};
+    try {
+      const storePath = this._resolveHashStorePath();
+      if (storePath && fs.existsSync(storePath)) {
+        this._hashes = JSON.parse(fs.readFileSync(storePath, "utf-8")) || {};
+      }
+    } catch (err) {
+      debugLogger.error("Failed to load mirror hash store", { error: err.message }, "note-files");
+    }
+    return this._hashes;
+  }
+
+  // Coalesced via setImmediate: a rebuild writes many notes in one tick but
+  // persists the store once. Losing an unsaved update on hard crash is safe —
+  // the affected file just gets the backup-then-write treatment next time.
+  _saveHashes() {
+    if (this._hashSaveQueued) return;
+    this._hashSaveQueued = true;
+    setImmediate(() => {
+      this._hashSaveQueued = false;
+      const storePath = this._resolveHashStorePath();
+      if (!storePath || !this._hashes) return;
+      try {
+        this._atomicWrite(storePath, JSON.stringify(this._hashes));
+      } catch (err) {
+        debugLogger.error("Failed to save mirror hash store", { error: err.message }, "note-files");
+      }
+    });
+  }
+
+  // App-side copy (userData/mirror-overwrite-backups/) of vault content we're
+  // about to overwrite or unlink without being able to prove it's ours.
+  _backupFile(filePath, content) {
+    try {
+      const storePath = this._resolveHashStorePath();
+      if (!storePath) return;
+      const backupDir = path.join(path.dirname(storePath), "mirror-overwrite-backups");
+      fs.mkdirSync(backupDir, { recursive: true });
+      // Content-hash component keeps same-name backups written in the same
+      // instant from overwriting each other (identical content colliding is
+      // harmless — same bytes).
+      const stamp = new Date().toISOString().replace(/[:.]/g, "-");
+      const hash8 = this._sha256(content).slice(0, 8);
+      const backupPath = path.join(backupDir, `${stamp}-${hash8}-${path.basename(filePath)}`);
+      fs.writeFileSync(backupPath, content, "utf-8");
+      debugLogger.info(
+        "Backed up vault file before mirror overwrite/delete",
+        { filePath, backupPath },
+        "note-files"
+      );
+    } catch (err) {
+      debugLogger.error(
+        "Failed to back up vault file",
+        { filePath, error: err.message },
+        "note-files"
+      );
+    }
+  }
+
+  _backupIfExternallyModified(key, filePath) {
+    try {
+      const content = fs.readFileSync(filePath, "utf-8");
+      if (this._loadHashes()[key] === this._sha256(content)) return;
+      this._backupFile(filePath, content);
+    } catch {
+      // Unreadable/missing — nothing to preserve.
+    }
+  }
+
+  // Central write path for mirror files. No-op when on-disk content already
+  // matches (keeps rebuilds cheap and mtime-stable). Refuses to overwrite a
+  // file edited outside the app since our last write — the DB copy stays
+  // intact and the conflict is logged. Existing content with no recorded hash
+  // (pre-guard files) is backed up app-side once, then adopted.
+  _guardedWrite(key, filePath, content) {
+    const hashes = this._loadHashes();
+    const newHash = this._sha256(content);
+    let diskContent = null;
+    try {
+      diskContent = fs.readFileSync(filePath, "utf-8");
+    } catch {}
+    if (diskContent != null) {
+      const diskHash = this._sha256(diskContent);
+      if (diskHash === newHash) {
+        if (hashes[key] !== newHash) {
+          hashes[key] = newHash;
+          this._saveHashes();
+        }
+        return;
+      }
+      if (hashes[key] && diskHash !== hashes[key]) {
+        debugLogger.warn(
+          "Skipped mirror write: file was edited outside the app since the last mirror write",
+          { key, filePath },
+          "note-files"
+        );
+        return;
+      }
+      if (!hashes[key]) this._backupFile(filePath, diskContent);
+    }
+    this._atomicWrite(filePath, content);
+    hashes[key] = newHash;
+    this._saveHashes();
   }
 
   setTemplatePath(templatePath) {
@@ -203,16 +346,24 @@ class MarkdownMirror {
       fs.mkdirSync(dirPath, { recursive: true });
 
       // Remove stale files (title changed or note moved to different folder)
+      const noteKey = String(note.id);
+      const transcriptKey = `${note.id}:transcript`;
       const glob = this._globNoteFiles(note.id);
       const slug = this._slugify(note.title);
       const newFileName = `${note.id}-${slug}.md`;
       const newFilePath = path.join(dirPath, newFileName);
       for (const existing of glob) {
-        if (existing !== newFilePath) {
-          try {
-            fs.unlinkSync(existing);
-          } catch {}
-        }
+        if (existing === newFilePath) continue;
+        const isSidecar = /-transcript\.(md|txt)$/.test(existing);
+        // Stock mode: writeTranscript owns the sidecar lifecycle (including
+        // its own stale sweep on rename) — deleting it here would churn it on
+        // every note write. Template mode inlines the transcript, so a
+        // sidecar is an orphan to remove.
+        if (isSidecar && !this._templateContent) continue;
+        this._backupIfExternallyModified(isSidecar ? transcriptKey : noteKey, existing);
+        try {
+          fs.unlinkSync(existing);
+        } catch {}
       }
 
       // Template branch renders one self-contained file with {{transcript}}
@@ -233,7 +384,7 @@ class MarkdownMirror {
         output = `${frontmatter}\n\n${body}`;
       }
 
-      fs.writeFileSync(newFilePath, output, "utf-8");
+      this._guardedWrite(noteKey, newFilePath, output);
     } catch (err) {
       debugLogger.error(
         "Failed to write note file",
@@ -259,18 +410,19 @@ class MarkdownMirror {
       const slug = this._slugify(note.title);
       const newFileName = `${note.id}-${slug}-transcript.md`;
       const newFilePath = path.join(dirPath, newFileName);
+      const transcriptKey = `${note.id}:transcript`;
 
       const stale = this._globTranscriptFiles(note.id);
       for (const existing of stale) {
-        if (existing !== newFilePath) {
-          try {
-            fs.unlinkSync(existing);
-          } catch {}
-        }
+        if (existing === newFilePath) continue;
+        this._backupIfExternallyModified(transcriptKey, existing);
+        try {
+          fs.unlinkSync(existing);
+        } catch {}
       }
 
       const { formatMd } = require("./transcriptFormatter");
-      fs.writeFileSync(newFilePath, formatMd(note, segments, speakerMappings || {}), "utf-8");
+      this._guardedWrite(transcriptKey, newFilePath, formatMd(note, segments, speakerMappings || {}));
     } catch (err) {
       debugLogger.error(
         "Failed to write transcript file",
@@ -283,9 +435,23 @@ class MarkdownMirror {
   deleteNote(noteId) {
     if (!this._basePath) return;
     try {
-      const files = [...this._globNoteFiles(noteId), ...this._globTranscriptFiles(noteId)];
+      const noteKey = String(noteId);
+      const transcriptKey = `${noteId}:transcript`;
+      const files = [
+        ...new Set([...this._globNoteFiles(noteId), ...this._globTranscriptFiles(noteId)]),
+      ];
       for (const f of files) {
-        fs.unlinkSync(f);
+        const isSidecar = /-transcript\.(md|txt)$/.test(f);
+        this._backupIfExternallyModified(isSidecar ? transcriptKey : noteKey, f);
+        try {
+          fs.unlinkSync(f);
+        } catch {}
+      }
+      const hashes = this._loadHashes();
+      if (noteKey in hashes || transcriptKey in hashes) {
+        delete hashes[noteKey];
+        delete hashes[transcriptKey];
+        this._saveHashes();
       }
     } catch (err) {
       debugLogger.error("Failed to delete note file", { noteId, error: err.message }, "note-files");
@@ -331,22 +497,6 @@ class MarkdownMirror {
       fs.rmdirSync(this._resolveDir(folderName));
     } catch {
       // ENOTEMPTY / ENOENT — leave the directory in place.
-    }
-  }
-
-  deleteFolder(folderName) {
-    if (!this._basePath) return;
-    try {
-      const dir = path.join(this._basePath, folderName);
-      if (fs.existsSync(dir)) {
-        fs.rmSync(dir, { recursive: true, force: true });
-      }
-    } catch (err) {
-      debugLogger.error(
-        "Failed to delete folder",
-        { folderName, error: err.message },
-        "note-files"
-      );
     }
   }
 
