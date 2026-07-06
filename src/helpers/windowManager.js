@@ -631,21 +631,16 @@ class WindowManager {
     return await this.dragManager.stopWindowDrag();
   }
 
-  // The dictation panel is normally shown with showInactive() so it never
-  // steals focus from the user's active app. But a transient interaction
-  // like the right-click command menu needs keyboard focus so Escape works
-  // and so the window emits a `blur` event when the user clicks away (which
-  // the renderer uses to dismiss the menu). Call this when opening the menu.
+  // Best-effort focus request when the command menu opens. On platforms where
+  // the overlay can take focus this enables the renderer's blur-based menu
+  // dismissal. On macOS it is a no-op by design: the bar is a non-activating
+  // panel (focusable: false, type "panel") that can never become the key
+  // window — even with a transient setFocusable(true), verified live. Menu
+  // dismissal there uses the global Escape grab + the hover-away timer in the
+  // renderer instead.
   focusMainWindow() {
     if (!this.mainWindow || this.mainWindow.isDestroyed()) {
       return { success: false, message: "Window not available" };
-    }
-    // The bar is created `focusable: false` (stops focus theft on show), but
-    // focus() on a non-focusable window is a no-op on macOS — Escape and the
-    // blur dismissal would never work. Make it focusable transiently; the
-    // window's `blur` handler restores non-focusable (registerMainWindowEvents).
-    if (typeof this.mainWindow.setFocusable === "function") {
-      this.mainWindow.setFocusable(true);
     }
     this.mainWindow.focus();
     return { success: true };
@@ -1245,14 +1240,6 @@ class WindowManager {
 
     this.mainWindow.on("focus", () => {
       this.enforceMainWindowOnTop();
-    });
-
-    this.mainWindow.on("blur", () => {
-      // Undo the transient focusable from focusMainWindow() (command menu)
-      // so the bar goes back to never stealing focus from the active app.
-      if (this.mainWindow && typeof this.mainWindow.setFocusable === "function") {
-        this.mainWindow.setFocusable(false);
-      }
     });
 
     this.mainWindow.on("closed", () => {

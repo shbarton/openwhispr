@@ -61,6 +61,9 @@ function writeStoredPanelPosition(bounds) {
 
 export default function App() {
   const [isHovered, setIsHovered] = useState(false);
+  // Pointer-over-the-menu — tracked separately from the bar hover so the
+  // hover-away retract effect knows when the pointer has left both.
+  const [isMenuHovered, setIsMenuHovered] = useState(false);
   const [isCommandMenuOpen, setIsCommandMenuOpen] = useState(false);
   const commandMenuRef = useRef(null);
   const wrapperRef = useRef(null);
@@ -237,6 +240,7 @@ export default function App() {
 
   const isRecordingRef = useRef(isRecording);
   const isProcessingRef = useRef(isProcessing);
+  const isCommandMenuOpenRef = useRef(isCommandMenuOpen);
 
   useLayoutEffect(() => {
     isRecordingRef.current = isRecording;
@@ -246,15 +250,43 @@ export default function App() {
     isProcessingRef.current = isProcessing;
   }, [isProcessing]);
 
+  useLayoutEffect(() => {
+    isCommandMenuOpenRef.current = isCommandMenuOpen;
+  }, [isCommandMenuOpen]);
+
   useEffect(() => {
     const unsubscribe = window.electronAPI?.onCancelHotkeyPressed?.(() => {
+      // Escape dismisses the command menu first. The global grab is the only
+      // working Escape path: on macOS the bar is a non-activating panel
+      // (focusable: false) that can never become the key window, so the
+      // in-window keydown handler below never receives keys.
+      if (isCommandMenuOpenRef.current) {
+        setIsCommandMenuOpen(false);
+        setWindowInteractivity(false);
+        return;
+      }
       // State-aware like the in-window Escape handler below: while recording
       // cancel the take; while transcribing cancel the processing pipeline.
       if (isRecordingRef.current) cancelRecording();
       else if (isProcessingRef.current) cancelProcessing();
     });
     return () => unsubscribe?.();
-  }, [cancelRecording, cancelProcessing]);
+  }, [cancelRecording, cancelProcessing, setWindowInteractivity]);
+
+  // Hold the global Escape grab while the menu is open and nothing is
+  // recording (the recording flow registers the same "cancel" slot for its
+  // own Escape handling and must keep ownership of it).
+  useEffect(() => {
+    if (!isCommandMenuOpen || isRecording || isProcessing) return;
+    window.electronAPI?.registerCancelHotkey?.("Escape");
+    return () => {
+      // If a take started while the menu was open, the recording flow now
+      // owns the grab — leave it registered.
+      if (!isRecordingRef.current && !isProcessingRef.current) {
+        window.electronAPI?.unregisterCancelHotkey?.();
+      }
+    };
+  }, [isCommandMenuOpen, isRecording, isProcessing]);
 
   // Auto-hide the floating bar when idle — driven by the auto-hide preference
   // OR an active snooze. Recording/processing always keeps it visible, so the
@@ -327,17 +359,31 @@ export default function App() {
     return () => document.removeEventListener("keydown", handleKeyPress);
   }, [isCommandMenuOpen, isRecording, isProcessing, cancelRecording, cancelProcessing]);
 
-  // Dismiss the command menu when the panel loses focus (i.e. the user
-  // clicked another app/window). Clicks landing outside the small overlay
-  // window never reach our document-level mousedown handler — they hit the
-  // click-through region or another app entirely — so `blur` is the only
-  // reliable signal for "clicked away". Requires the panel to have been
-  // focused on menu-open (see onWrapperContextMenu).
+  // Best-effort blur dismissal — only fires on platforms where the overlay
+  // can actually take focus (not macOS, where it's a non-activating panel).
   useEffect(() => {
     if (!isCommandMenuOpen) return;
     const handleBlur = () => setIsCommandMenuOpen(false);
     window.addEventListener("blur", handleBlur);
     return () => window.removeEventListener("blur", handleBlur);
+  }, [isCommandMenuOpen]);
+
+  // Clicked-away fallback that needs neither focus nor global mouse hooks:
+  // clicks in other apps never reach this window, so retract the menu once
+  // the pointer has been away from both the bar and the menu for a moment.
+  useEffect(() => {
+    if (!isCommandMenuOpen || isHovered || isMenuHovered) return;
+    const awayTimer = setTimeout(() => {
+      setIsCommandMenuOpen(false);
+      setWindowInteractivity(false);
+    }, 2500);
+    return () => clearTimeout(awayTimer);
+  }, [isCommandMenuOpen, isHovered, isMenuHovered, setWindowInteractivity]);
+
+  // The menu unmounts without a mouseleave — clear its hover flag so a stale
+  // value can't block the next open's hover-away timer.
+  useEffect(() => {
+    if (!isCommandMenuOpen) setIsMenuHovered(false);
   }, [isCommandMenuOpen]);
 
   // Restore the user's last-dragged panel position on mount. Mid-drag
@@ -444,9 +490,10 @@ export default function App() {
     setWindowInteractivity(true);
     const opening = !isCommandMenuOpen;
     setIsCommandMenuOpen(opening);
-    // Focus the panel when opening so Escape works and so clicking away
-    // emits a window `blur` we use to dismiss the menu — the panel is
-    // otherwise a non-activating overlay (showInactive).
+    // Best-effort: on platforms where the overlay can take focus this enables
+    // blur-based dismissal. On macOS the panel can never become key (verified
+    // live) — there Escape comes from the global grab and click-away from the
+    // hover-away timer instead.
     if (opening) window.electronAPI?.focusMainWindow?.();
   };
 
@@ -499,9 +546,11 @@ export default function App() {
             // area). Place the menu just above that with an 8px gap.
             className="fixed bottom-[64px] left-1/2 -translate-x-1/2 z-50 w-48 rounded-lg border border-border bg-popover text-popover-foreground shadow-lg backdrop-blur-sm"
             onMouseEnter={() => {
+              setIsMenuHovered(true);
               setWindowInteractivity(true);
             }}
             onMouseLeave={() => {
+              setIsMenuHovered(false);
               if (!isHovered) {
                 setWindowInteractivity(false);
               }
@@ -510,6 +559,8 @@ export default function App() {
             <button
               className="w-full px-3 py-2 text-left text-sm font-medium hover:bg-muted focus:bg-muted focus:outline-none"
               onClick={() => {
+                setIsCommandMenuOpen(false);
+                setWindowInteractivity(false);
                 toggleListening();
               }}
             >
