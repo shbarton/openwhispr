@@ -254,6 +254,23 @@ export default function App() {
     isCommandMenuOpenRef.current = isCommandMenuOpen;
   }, [isCommandMenuOpen]);
 
+  // Optimistic bar state for click-driven toggles. The pipeline flips
+  // isRecording/isProcessing only once the mic/socket is actually live (or
+  // torn down), so a menu/bar click reads as a dead button for the whole
+  // setup (~0.5–1s+). Show the target state immediately; the real state
+  // reconciles it, and a rollback timeout covers silent start failures.
+  const [pendingBarState, setPendingBarState] = useState(null);
+
+  useEffect(() => {
+    setPendingBarState(null);
+  }, [isRecording, isProcessing]);
+
+  useEffect(() => {
+    if (!pendingBarState) return;
+    const rollback = setTimeout(() => setPendingBarState(null), 4000);
+    return () => clearTimeout(rollback);
+  }, [pendingBarState]);
+
   useEffect(() => {
     const unsubscribe = window.electronAPI?.onCancelHotkeyPressed?.(() => {
       // Escape dismisses the command menu first. The global grab is the only
@@ -294,7 +311,10 @@ export default function App() {
   useEffect(() => {
     let hideTimeout;
 
-    if (shouldAutoHide && !isRecording && !isProcessing && toastCount === 0) {
+    // pendingBarState counts as activity: without it, a click-to-start with
+    // auto-hide on could hide the bar during the ~1s before isRecording
+    // flips (the 500ms delay only papers over fast transitions).
+    if (shouldAutoHide && !isRecording && !isProcessing && !pendingBarState && toastCount === 0) {
       // Delay briefly so processing can start after recording stops without a flash
       hideTimeout = setTimeout(() => {
         window.electronAPI?.hideWindow?.();
@@ -307,7 +327,7 @@ export default function App() {
 
     prevAutoHideRef.current = shouldAutoHide;
     return () => clearTimeout(hideTimeout);
-  }, [isRecording, isProcessing, shouldAutoHide, toastCount]);
+  }, [isRecording, isProcessing, pendingBarState, shouldAutoHide, toastCount]);
 
   const handleClose = () => {
     window.electronAPI.hideWindow();
@@ -397,7 +417,8 @@ export default function App() {
     }
   }, []);
 
-  const barState = isRecording ? "recording" : isProcessing ? "transcribing" : "idle";
+  const actualBarState = isRecording ? "recording" : isProcessing ? "transcribing" : "idle";
+  const barState = pendingBarState ?? actualBarState;
 
   // Surface the slow-transcription affordance (message + cancel button in
   // the View) once transcribing has dragged on past the shared threshold;
@@ -438,10 +459,19 @@ export default function App() {
     };
   }, []);
 
+  // Toggle with immediate visual feedback. Mirrors toggleListening's branch
+  // so we never show a state the toggle won't actually enter (it no-ops
+  // while transcribing).
+  const optimisticToggle = React.useCallback(() => {
+    if (isRecordingRef.current) setPendingBarState("transcribing");
+    else if (!isProcessingRef.current) setPendingBarState("recording");
+    toggleListening();
+  }, [toggleListening]);
+
   // Idle-click-to-start and recording's Stop both just toggle listening.
   const handleToggle = useMemo(
-    () => guardClick(() => toggleListening()),
-    [guardClick, toggleListening]
+    () => guardClick(() => optimisticToggle()),
+    [guardClick, optimisticToggle]
   );
   const handleCancel = useMemo(
     () =>
@@ -561,7 +591,7 @@ export default function App() {
               onClick={() => {
                 setIsCommandMenuOpen(false);
                 setWindowInteractivity(false);
-                toggleListening();
+                optimisticToggle();
               }}
             >
               {isRecording
