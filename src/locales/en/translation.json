@@ -1949,6 +1949,7 @@
       "stop": "Stop",
       "transcribe": "Transcribe",
       "record": "Record",
+      "diarizationFailed": "Speaker detection failed — transcript saved without speakers",
       "processing": "Processing...",
       "export": "Export",
       "asMarkdown": "As Markdown",

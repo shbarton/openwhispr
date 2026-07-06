@@ -47,6 +47,7 @@ import {
 import MeetingMetadataRow from "./MeetingMetadataRow";
 import MeetingChatRail from "./MeetingChatRail";
 import { useOnFallingEdge } from "../../hooks/useOnFallingEdge";
+import { useToast } from "../ui/useToast";
 import type { CalendarAttendee } from "../../types/calendar";
 
 function formatNoteDate(dateStr: string): string {
@@ -151,6 +152,7 @@ export default function NoteEditor({
   onNoteMetadataUpdate,
 }: NoteEditorProps) {
   const { t } = useTranslation();
+  const { toast } = useToast();
   const [viewMode, setViewMode] = useState<MeetingViewMode>("raw");
   const [chatMode, setChatMode] = useState<EmbeddedChatMode>("hidden");
   const [folderSearch, setFolderSearch] = useState("");
@@ -370,7 +372,17 @@ export default function NoteEditor({
 
       setIsDiarizing(false);
 
-      if (!data?.segments?.length) return;
+      if (!data?.segments?.length) {
+        // Diarization failed or produced nothing — the live transcript stands.
+        // Say so instead of the spinner just stopping.
+        if (data?.error) {
+          toast({
+            title: t("notes.editor.diarizationFailed"),
+            variant: "destructive",
+          });
+        }
+        return;
+      }
 
       const persisted = await window.electronAPI?.getNote?.(note.id);
       const existing = persisted?.transcript
@@ -401,7 +413,7 @@ export default function NoteEditor({
       }
     });
     return () => cleanup?.();
-  }, [note.id, diarizationSessionId]);
+  }, [note.id, diarizationSessionId, t, toast]);
 
   const persistDisplaySegments = useCallback(
     async (nextSegments: TranscriptSegment[], updateOverlay = true) => {

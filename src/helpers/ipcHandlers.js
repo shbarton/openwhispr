@@ -8637,7 +8637,10 @@ class IPCHandlers {
         send({ segments: enrichedSegments, speakerEmbeddings: speakerEmbeddingsMap });
       } catch (err) {
         debugLogger.warn("Background diarization failed", { error: err.message });
-        send({ segments: [] });
+        // Empty segments are guarded renderer-side (live transcript kept);
+        // the error lets the UI say why speakers are missing instead of the
+        // spinner just stopping.
+        send({ segments: [], error: err.message });
       } finally {
         try {
           fs.unlinkSync(rawPcmPath);

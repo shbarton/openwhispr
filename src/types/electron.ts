@@ -1719,6 +1719,9 @@ declare global {
             speakerLockSource?: "user" | "diarization" | "suggestion";
           }>;
           speakerEmbeddings?: Record<string, number[]> | null;
+          // Set when diarization failed (segments will be empty) so the UI
+          // can explain why speakers are missing.
+          error?: string;
         }) => void
       ) => () => void;
 
