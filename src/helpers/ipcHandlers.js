@@ -456,14 +456,16 @@ class IPCHandlers {
     markdownMirror.setFolderDirs(dirs);
   }
 
-  // Relocate a folder's mirrored `<id>-*` files (note + transcript sidecars,
-  // any extension) from one dir to another. Only touches files whose id matches
-  // a note in this folder — never rm's a directory (the target may be a
-  // user-owned vault location). Returns count.
+  // Relocate a folder's mirrored files (note + transcript sidecar) from one
+  // dir to another via the mirror's path index (with legacy `<id>-` glob
+  // fallback). Only touches files belonging to this folder's notes — never
+  // rm's a directory (the target may be a user-owned vault location).
+  // Returns count.
   _moveFolderMirrorFiles(folder, fromDir, toDir) {
     let moved = 0;
     try {
       fs.mkdirSync(toDir, { recursive: true });
+      const markdownMirror = require("./markdownMirror");
       // Notes with folder_id NULL resolve to the "Personal" folder (see
       // _getFolderName), so include them when moving Personal — otherwise their
       // files are stranded in the old dir.
@@ -471,43 +473,12 @@ class IPCHandlers {
         folder.name === "Personal"
           ? "SELECT id FROM notes WHERE folder_id = ? OR folder_id IS NULL"
           : "SELECT id FROM notes WHERE folder_id = ?";
-      const ids = new Set(
-        this.databaseManager.db
-          .prepare(sql)
-          .all(folder.id)
-          .map((r) => String(r.id))
-      );
-      let entries = [];
-      try {
-        entries = fs.readdirSync(fromDir);
-      } catch {
-        return 0;
-      }
-      for (const file of entries) {
-        // Any `<id>-*` artifact: note `.md`, sidecar `-transcript.md`/`.txt`.
-        const m = file.match(/^(\d+)-/);
-        if (!m || !ids.has(m[1])) continue;
-        const src = path.join(fromDir, file);
-        const dst = path.join(toDir, file);
-        try {
-          fs.renameSync(src, dst);
-        } catch {
-          // Cross-filesystem fallback. Guard per file so one failure doesn't
-          // abort the rest of the move; a copy that lands but fails to unlink
-          // leaves a harmless duplicate at the source.
-          try {
-            fs.copyFileSync(src, dst);
-            fs.unlinkSync(src);
-          } catch (moveErr) {
-            debugLogger.error(
-              "Failed to move mirror file; leaving it in place",
-              { file, error: moveErr.message },
-              "note-files"
-            );
-            continue;
-          }
-        }
-        moved++;
+      const ids = this.databaseManager.db
+        .prepare(sql)
+        .all(folder.id)
+        .map((r) => r.id);
+      for (const id of ids) {
+        moved += markdownMirror.relocateNoteFiles(id, fromDir, toDir);
       }
     } catch (err) {
       debugLogger.error(

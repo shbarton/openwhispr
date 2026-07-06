@@ -12,13 +12,15 @@ class MarkdownMirror {
     // ipcHandlers (folder.path ?? <base>/<name>). Lets the mirror write to and
     // glob across folders that live outside the base path.
     this._folderDirs = {};
-    // { [key]: sha256 } of the content this mirror last wrote per note
-    // (`"<id>"`) / transcript sidecar (`"<id>:transcript"`). Lives in userData,
-    // not the vault. Lets writes detect files edited outside the app and
-    // refuse to clobber them.
-    this._hashes = null;
+    // { [key]: { hash, path } } per note (`"<id>"`) / transcript sidecar
+    // (`"<id>:transcript"`). `hash` is the sha256 of what this mirror last
+    // wrote (external-edit detection); `path` is where the file lives —
+    // filenames are slug-only, so this index (with a legacy `<id>-` prefix
+    // glob as fallback) is the note↔file link. Lives in userData, not the
+    // vault.
+    this._index = null;
     this._hashStorePath = undefined;
-    this._hashSaveQueued = false;
+    this._indexSaveQueued = false;
   }
 
   init(basePath) {
@@ -92,36 +94,60 @@ class MarkdownMirror {
     return this._hashStorePath;
   }
 
-  _loadHashes() {
-    if (this._hashes) return this._hashes;
-    this._hashes = {};
+  // File name kept from the hash-only era so existing hashes carry over.
+  _loadIndex() {
+    if (this._index) return this._index;
+    this._index = {};
     try {
       const storePath = this._resolveHashStorePath();
       if (storePath && fs.existsSync(storePath)) {
-        this._hashes = JSON.parse(fs.readFileSync(storePath, "utf-8")) || {};
+        const raw = JSON.parse(fs.readFileSync(storePath, "utf-8")) || {};
+        // Hash-only-era entries were bare strings; carry them forward with no
+        // path (the legacy `<id>-` glob covers those files until next write).
+        for (const [key, value] of Object.entries(raw)) {
+          this._index[key] = typeof value === "string" ? { hash: value, path: null } : value;
+        }
       }
     } catch (err) {
-      debugLogger.error("Failed to load mirror hash store", { error: err.message }, "note-files");
+      debugLogger.error("Failed to load mirror index", { error: err.message }, "note-files");
     }
-    return this._hashes;
+    return this._index;
   }
 
   // Coalesced via setImmediate: a rebuild writes many notes in one tick but
   // persists the store once. Losing an unsaved update on hard crash is safe —
   // the affected file just gets the backup-then-write treatment next time.
-  _saveHashes() {
-    if (this._hashSaveQueued) return;
-    this._hashSaveQueued = true;
+  _saveIndex() {
+    if (this._indexSaveQueued) return;
+    this._indexSaveQueued = true;
     setImmediate(() => {
-      this._hashSaveQueued = false;
+      this._indexSaveQueued = false;
       const storePath = this._resolveHashStorePath();
-      if (!storePath || !this._hashes) return;
+      if (!storePath || !this._index) return;
       try {
-        this._atomicWrite(storePath, JSON.stringify(this._hashes));
+        this._atomicWrite(storePath, JSON.stringify(this._index));
       } catch (err) {
-        debugLogger.error("Failed to save mirror hash store", { error: err.message }, "note-files");
+        debugLogger.error("Failed to save mirror index", { error: err.message }, "note-files");
       }
     });
+  }
+
+  _setIndexPath(key, filePath) {
+    const index = this._loadIndex();
+    index[key] = { hash: index[key]?.hash ?? null, path: filePath };
+    this._saveIndex();
+  }
+
+  _pruneIndex(...keys) {
+    const index = this._loadIndex();
+    let changed = false;
+    for (const key of keys) {
+      if (key in index) {
+        delete index[key];
+        changed = true;
+      }
+    }
+    if (changed) this._saveIndex();
   }
 
   // App-side copy (userData/mirror-overwrite-backups/) of vault content we're
@@ -156,7 +182,7 @@ class MarkdownMirror {
   _backupIfExternallyModified(key, filePath) {
     try {
       const content = fs.readFileSync(filePath, "utf-8");
-      if (this._loadHashes()[key] === this._sha256(content)) return;
+      if (this._loadIndex()[key]?.hash === this._sha256(content)) return;
       this._backupFile(filePath, content);
     } catch {
       // Unreadable/missing — nothing to preserve.
@@ -169,7 +195,8 @@ class MarkdownMirror {
   // intact and the conflict is logged. Existing content with no recorded hash
   // (pre-guard files) is backed up app-side once, then adopted.
   _guardedWrite(key, filePath, content) {
-    const hashes = this._loadHashes();
+    const index = this._loadIndex();
+    const entry = index[key];
     const newHash = this._sha256(content);
     let diskContent = null;
     try {
@@ -178,25 +205,78 @@ class MarkdownMirror {
     if (diskContent != null) {
       const diskHash = this._sha256(diskContent);
       if (diskHash === newHash) {
-        if (hashes[key] !== newHash) {
-          hashes[key] = newHash;
-          this._saveHashes();
+        if (entry?.hash !== newHash || entry?.path !== filePath) {
+          index[key] = { hash: newHash, path: filePath };
+          this._saveIndex();
         }
         return;
       }
-      if (hashes[key] && diskHash !== hashes[key]) {
+      if (entry?.hash && diskHash !== entry.hash) {
         debugLogger.warn(
           "Skipped mirror write: file was edited outside the app since the last mirror write",
           { key, filePath },
           "note-files"
         );
+        // Still track where the file lives so renames/moves/deletes find it.
+        if (entry.path !== filePath) {
+          index[key] = { ...entry, path: filePath };
+          this._saveIndex();
+        }
         return;
       }
-      if (!hashes[key]) this._backupFile(filePath, diskContent);
+      if (!entry?.hash) this._backupFile(filePath, diskContent);
     }
     this._atomicWrite(filePath, content);
-    hashes[key] = newHash;
-    this._saveHashes();
+    index[key] = { hash: newHash, path: filePath };
+    this._saveIndex();
+  }
+
+  // Where a note's file currently lives: the index's path when it still
+  // exists on disk, else the legacy `<id>-` prefix glob (files written before
+  // filenames went slug-only).
+  _resolveExistingPath(key, noteId, isTranscript) {
+    const entry = this._loadIndex()[key];
+    if (entry?.path && fs.existsSync(entry.path)) return entry.path;
+    const legacy = isTranscript ? this._globTranscriptFiles(noteId) : this._globNoteFiles(noteId);
+    const files = isTranscript
+      ? legacy
+      : legacy.filter((f) => !/-transcript\.(md|txt)$/.test(f));
+    return files[0] || null;
+  }
+
+  // Slug-only target filename, deduped against files we don't own:
+  // `<base>.md`, then `<base>-2.md`, `<base>-3.md`… A candidate is free when
+  // it's this note's own current file, or nothing exists there and no other
+  // note claims it in the index.
+  _resolveTargetPath(dirPath, baseName, key, currentPath) {
+    const index = this._loadIndex();
+    const claimedByOther = (p) =>
+      Object.entries(index).some(([k, v]) => k !== key && v?.path === p);
+    for (let n = 1; n <= 200; n++) {
+      const name = n === 1 ? `${baseName}.md` : `${baseName}-${n}.md`;
+      const candidate = path.join(dirPath, name);
+      if (candidate === currentPath) return candidate;
+      if (!fs.existsSync(candidate) && !claimedByOther(candidate)) return candidate;
+    }
+    // Effectively unreachable; the id suffix guarantees uniqueness.
+    return path.join(dirPath, `${baseName}-${key.replace(":", "-")}.md`);
+  }
+
+  // With the id gone from the filename, the file itself must carry the
+  // note's identity — vault-meeting-spec's anchor, and what
+  // meeting-folder-sync's reconciliation will match on. Injected into the
+  // rendered output's frontmatter (template or stock), or a minimal block is
+  // prepended when the template emits none.
+  _stampIdentity(output, note) {
+    const stamp = `openwhispr_id: ${note.id}\nsource: calyxvoice`;
+    if (output.startsWith("---\n")) {
+      const close = output.indexOf("\n---", 4);
+      if (close !== -1) {
+        if (/^openwhispr_id:/m.test(output.slice(4, close))) return output;
+        return `${output.slice(0, close)}\n${stamp}${output.slice(close)}`;
+      }
+    }
+    return `---\n${stamp}\n---\n\n${output}`;
   }
 
   setTemplatePath(templatePath) {
@@ -345,25 +425,55 @@ class MarkdownMirror {
       const dirPath = this._resolveDir(dirName);
       fs.mkdirSync(dirPath, { recursive: true });
 
-      // Remove stale files (title changed or note moved to different folder)
       const noteKey = String(note.id);
       const transcriptKey = `${note.id}:transcript`;
-      const glob = this._globNoteFiles(note.id);
-      const slug = this._slugify(note.title);
-      const newFileName = `${note.id}-${slug}.md`;
-      const newFilePath = path.join(dirPath, newFileName);
-      for (const existing of glob) {
-        if (existing === newFilePath) continue;
-        const isSidecar = /-transcript\.(md|txt)$/.test(existing);
-        // Stock mode: writeTranscript owns the sidecar lifecycle (including
-        // its own stale sweep on rename) — deleting it here would churn it on
-        // every note write. Template mode inlines the transcript, so a
-        // sidecar is an orphan to remove.
-        if (isSidecar && !this._templateContent) continue;
-        this._backupIfExternallyModified(isSidecar ? transcriptKey : noteKey, existing);
+
+      const currentPath = this._resolveExistingPath(noteKey, note.id, false);
+      const newFilePath = this._resolveTargetPath(
+        dirPath,
+        this._slugify(note.title),
+        noteKey,
+        currentPath
+      );
+
+      // Title rename / folder change / legacy `<id>-` file: move the
+      // existing file instead of write-new-and-delete-old — a plain rename
+      // preserves any edits made directly in the vault.
+      if (currentPath && currentPath !== newFilePath) {
         try {
-          fs.unlinkSync(existing);
+          fs.renameSync(currentPath, newFilePath);
+          this._setIndexPath(noteKey, newFilePath);
+        } catch (err) {
+          debugLogger.error(
+            "Failed to rename note file; will write fresh and clean up",
+            { from: currentPath, to: newFilePath, error: err.message },
+            "note-files"
+          );
+        }
+      }
+
+      // Leftovers beyond the tracked file: older duplicates from the legacy
+      // prefix scheme, and — in template mode — the orphaned transcript
+      // sidecar (its content is inlined via {{transcript}}). Stock mode
+      // leaves sidecars to writeTranscript's own lifecycle.
+      for (const stale of this._globNoteFiles(note.id)) {
+        if (stale === newFilePath) continue;
+        const isSidecar = /-transcript\.(md|txt)$/.test(stale);
+        if (isSidecar && !this._templateContent) continue;
+        this._backupIfExternallyModified(isSidecar ? transcriptKey : noteKey, stale);
+        try {
+          fs.unlinkSync(stale);
         } catch {}
+      }
+      if (this._templateContent) {
+        const sidecar = this._resolveExistingPath(transcriptKey, note.id, true);
+        if (sidecar && sidecar !== newFilePath) {
+          this._backupIfExternallyModified(transcriptKey, sidecar);
+          try {
+            fs.unlinkSync(sidecar);
+          } catch {}
+        }
+        this._pruneIndex(transcriptKey);
       }
 
       // Template branch renders one self-contained file with {{transcript}}
@@ -384,7 +494,7 @@ class MarkdownMirror {
         output = `${frontmatter}\n\n${body}`;
       }
 
-      this._guardedWrite(noteKey, newFilePath, output);
+      this._guardedWrite(noteKey, newFilePath, this._stampIdentity(output, note));
     } catch (err) {
       debugLogger.error(
         "Failed to write note file",
@@ -407,17 +517,33 @@ class MarkdownMirror {
       const dirPath = this._resolveDir(dirName);
       fs.mkdirSync(dirPath, { recursive: true });
 
-      const slug = this._slugify(note.title);
-      const newFileName = `${note.id}-${slug}-transcript.md`;
-      const newFilePath = path.join(dirPath, newFileName);
       const transcriptKey = `${note.id}:transcript`;
+      const currentPath = this._resolveExistingPath(transcriptKey, note.id, true);
+      const newFilePath = this._resolveTargetPath(
+        dirPath,
+        `${this._slugify(note.title)}-transcript`,
+        transcriptKey,
+        currentPath
+      );
 
-      const stale = this._globTranscriptFiles(note.id);
-      for (const existing of stale) {
-        if (existing === newFilePath) continue;
-        this._backupIfExternallyModified(transcriptKey, existing);
+      if (currentPath && currentPath !== newFilePath) {
         try {
-          fs.unlinkSync(existing);
+          fs.renameSync(currentPath, newFilePath);
+          this._setIndexPath(transcriptKey, newFilePath);
+        } catch (err) {
+          debugLogger.error(
+            "Failed to rename transcript file; will write fresh and clean up",
+            { from: currentPath, to: newFilePath, error: err.message },
+            "note-files"
+          );
+        }
+      }
+
+      for (const stale of this._globTranscriptFiles(note.id)) {
+        if (stale === newFilePath) continue;
+        this._backupIfExternallyModified(transcriptKey, stale);
+        try {
+          fs.unlinkSync(stale);
         } catch {}
       }
 
@@ -437,25 +563,63 @@ class MarkdownMirror {
     try {
       const noteKey = String(noteId);
       const transcriptKey = `${noteId}:transcript`;
-      const files = [
-        ...new Set([...this._globNoteFiles(noteId), ...this._globTranscriptFiles(noteId)]),
-      ];
+      const index = this._loadIndex();
+      const files = new Set([
+        ...this._globNoteFiles(noteId),
+        ...this._globTranscriptFiles(noteId),
+      ]);
+      // Slug-named files aren't matched by the legacy glob — add the tracked
+      // paths.
+      if (index[noteKey]?.path) files.add(index[noteKey].path);
+      if (index[transcriptKey]?.path) files.add(index[transcriptKey].path);
       for (const f of files) {
+        if (!fs.existsSync(f)) continue;
         const isSidecar = /-transcript\.(md|txt)$/.test(f);
         this._backupIfExternallyModified(isSidecar ? transcriptKey : noteKey, f);
         try {
           fs.unlinkSync(f);
         } catch {}
       }
-      const hashes = this._loadHashes();
-      if (noteKey in hashes || transcriptKey in hashes) {
-        delete hashes[noteKey];
-        delete hashes[transcriptKey];
-        this._saveHashes();
-      }
+      this._pruneIndex(noteKey, transcriptKey);
     } catch (err) {
       debugLogger.error("Failed to delete note file", { noteId, error: err.message }, "note-files");
     }
+  }
+
+  // Move a note's tracked file + sidecar between folder directories (folder
+  // path change). Legacy `<id>-` files are found by the glob fallback.
+  // Returns the number of files moved.
+  relocateNoteFiles(noteId, fromDir, toDir) {
+    let moved = 0;
+    for (const key of [String(noteId), `${noteId}:transcript`]) {
+      const isTranscript = key.endsWith(":transcript");
+      const current = this._resolveExistingPath(key, noteId, isTranscript);
+      if (!current || path.dirname(current) !== fromDir) continue;
+      // Re-resolve the destination name — the target dir may already hold a
+      // same-slug file belonging to another note.
+      const base = path.basename(current).replace(/\.md$/, "");
+      const dst = this._resolveTargetPath(toDir, base, key, null);
+      try {
+        fs.renameSync(current, dst);
+      } catch {
+        // Cross-filesystem fallback; per-file guard so one failure doesn't
+        // abort the rest of the folder move.
+        try {
+          fs.copyFileSync(current, dst);
+          fs.unlinkSync(current);
+        } catch (err) {
+          debugLogger.error(
+            "Failed to move mirror file; leaving it in place",
+            { file: current, error: err.message },
+            "note-files"
+          );
+          continue;
+        }
+      }
+      this._setIndexPath(key, dst);
+      moved++;
+    }
+    return moved;
   }
 
   ensureFolder(folderName) {
@@ -519,8 +683,7 @@ class MarkdownMirror {
 
   getNotePath(noteId) {
     if (!this._basePath) return null;
-    const files = this._globNoteFiles(noteId);
-    return files.length > 0 ? files[0] : null;
+    return this._resolveExistingPath(String(noteId), noteId, false);
   }
 
   getFolderPath(folderName) {
