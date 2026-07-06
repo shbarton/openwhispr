@@ -640,6 +640,13 @@ class WindowManager {
     if (!this.mainWindow || this.mainWindow.isDestroyed()) {
       return { success: false, message: "Window not available" };
     }
+    // The bar is created `focusable: false` (stops focus theft on show), but
+    // focus() on a non-focusable window is a no-op on macOS — Escape and the
+    // blur dismissal would never work. Make it focusable transiently; the
+    // window's `blur` handler restores non-focusable (registerMainWindowEvents).
+    if (typeof this.mainWindow.setFocusable === "function") {
+      this.mainWindow.setFocusable(true);
+    }
     this.mainWindow.focus();
     return { success: true };
   }
@@ -1240,11 +1247,37 @@ class WindowManager {
       this.enforceMainWindowOnTop();
     });
 
+    this.mainWindow.on("blur", () => {
+      // Undo the transient focusable from focusMainWindow() (command menu)
+      // so the bar goes back to never stealing focus from the active app.
+      if (this.mainWindow && typeof this.mainWindow.setFocusable === "function") {
+        this.mainWindow.setFocusable(false);
+      }
+    });
+
     this.mainWindow.on("closed", () => {
       this.dragManager.cleanup();
       this.mainWindow = null;
     });
 
+    this.mainWindow.webContents.on("render-process-gone", (_event, details) => {
+      if (details.reason === "clean-exit") return;
+      debugLogger.error(
+        "Dictation bar renderer process gone",
+        { reason: details.reason, exitCode: details.exitCode },
+        "window"
+      );
+      // The renderer is the only producer of "dictation-activity-changed"; if
+      // it dies mid-recording the meeting-detection gate would stay closed
+      // (notifications suppressed) until app restart. Reset it here.
+      this.meetingDetectionEngine?.setDictationActive(false);
+      this.meetingLifecycleManager?.applyPatch({ dictationActive: false });
+      setTimeout(() => {
+        if (this.mainWindow && !this.mainWindow.isDestroyed()) {
+          this.loadWindowContent(this.mainWindow, false);
+        }
+      }, 1000);
+    });
   }
 
   enforceMainWindowOnTop() {
