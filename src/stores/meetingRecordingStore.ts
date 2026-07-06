@@ -580,8 +580,17 @@ function flushPendingSegments() {
 
   // Feed the meeting lifecycle bus: a committed final segment is the strongest
   // "the meeting is still active" signal, and its absence drives end-detection.
+  // Segment sources also stamp the per-channel activity fields: Deepgram's VAD
+  // callbacks only cover deepgram-realtime, so for every other provider these
+  // stamps are the ONLY producers — without them lastSystemAudioAt stays null
+  // and end-detection treats system audio as eternally silent (false "meeting
+  // wrapped?" prompts on quiet stretches).
   if (finals.length > 0) {
-    publishMeetingSession({ lastTranscriptSegmentAt: new Date().toISOString() });
+    const nowIso = new Date().toISOString();
+    const patch: MeetingSessionPatch = { lastTranscriptSegmentAt: nowIso };
+    if (finals.some(({ source }) => source === "mic")) patch.lastMicAudioAt = nowIso;
+    if (finals.some(({ source }) => source !== "mic")) patch.lastSystemAudioAt = nowIso;
+    publishMeetingSession(patch);
   }
 
   // [latency-probe] One coalesced commit per frame instead of one per final.

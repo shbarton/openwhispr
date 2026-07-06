@@ -54,6 +54,7 @@ class MeetingEndDetector {
     this._promptActivityMark = 0;
     this._dismissed = false;
     this._promptTimeout = null;
+    this._wrapWatchdog = null;
 
     this._onProcessEnded = (data) => {
       if (!data?.processKey) return;
@@ -91,15 +92,21 @@ class MeetingEndDetector {
       this._timer = null;
     }
     this._clearPromptTimeout();
+    this._clearWrapWatchdog();
     this.meetingProcessDetector?.off?.("meeting-process-ended", this._onProcessEnded);
     this._resetSession(null);
   }
 
   _resetSession(sessionId) {
     this._sessionId = sessionId;
-    this._appsAtStart = new Set(
-      (this.meetingProcessDetector?.getDetectedProcesses?.() || []).map((p) => p.processKey)
-    );
+    // Only snapshot running meeting apps for a real session start — on
+    // teardown (sessionId null) the set must be empty, not "whatever is
+    // running at stop time."
+    this._appsAtStart = sessionId
+      ? new Set(
+          (this.meetingProcessDetector?.getDetectedProcesses?.() || []).map((p) => p.processKey)
+        )
+      : new Set();
     this._meetingAppTerminated = false;
     this._dismissed = false;
     this._promptShownAt = 0;
@@ -118,6 +125,7 @@ class MeetingEndDetector {
       snapshot.lastTranscriptSegmentAt,
       snapshot.lastMicAudioAt,
       snapshot.lastSystemAudioAt,
+      snapshot.lastUtteranceEndAt,
     ];
     let latest = 0;
     for (const iso of candidates) {
@@ -238,6 +246,16 @@ class MeetingEndDetector {
     }
   }
 
+  // Not cleared in _resetSession: the bus leaves "recording" (→ "wrapping")
+  // before the watchdog's check runs, and that transition resets the session.
+  // The watchdog's own status check makes a late fire harmless.
+  _clearWrapWatchdog() {
+    if (this._wrapWatchdog) {
+      clearTimeout(this._wrapWatchdog);
+      this._wrapWatchdog = null;
+    }
+  }
+
   // Called from the IPC layer when the user responds to a `wrap:` prompt.
   async handleResponse(action) {
     debugLogger.info("Meeting wrap-up response", { action }, "meeting");
@@ -249,6 +267,24 @@ class MeetingEndDetector {
       // the next tick.
       this.lifecycleManager?.applyPatch?.({ status: "wrapping", wrapPromptVisible: false });
       this.windowManager?.sendToControlPanel?.("meeting-wrap-up-stop", {});
+      // Watchdog: if the stop command is lost (e.g. no listener registered in
+      // the control panel at that moment), the bus would wedge in "wrapping"
+      // forever and block any new session. Reflect reality (still recording)
+      // and retry the stop once; if the renderer is alive the store's stop
+      // transition publishes its own status right after.
+      this._clearWrapWatchdog();
+      this._wrapWatchdog = setTimeout(() => {
+        this._wrapWatchdog = null;
+        const current = this.lifecycleManager?.getSnapshot?.();
+        if (current?.status !== "wrapping") return;
+        debugLogger.warn?.(
+          "Wrap-up stop did not complete within 10s — retrying and unwedging status",
+          {},
+          "meeting"
+        );
+        this.lifecycleManager?.applyPatch?.({ status: "recording" });
+        this.windowManager?.sendToControlPanel?.("meeting-wrap-up-stop", {});
+      }, 10000);
     } else if (action === "keep") {
       // Suppress for the rest of this recording session.
       this.lifecycleManager?.applyPatch?.({
