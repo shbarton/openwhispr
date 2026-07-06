@@ -37,6 +37,12 @@ class WindowManager {
     this.winPushState = null;
     this._cachedActivationMode = "tap";
     this._floatingIconAutoHide = false;
+    // Dictation-bar snooze: while active the renderer keeps the idle bar
+    // hidden (the hotkey still records and shows it transiently). `until` is
+    // an epoch-ms deadline for timed snoozes; `always` is indefinite.
+    this._dictationSnooze = { until: null, always: false };
+    this._snoozeTimer = null;
+    this._onSnoozeChange = null;
     this._agentAnimationState = null;
     // bottom-center default; overridden by the user setting via the
     // _panelStartPosition mutators.
@@ -479,6 +485,96 @@ class WindowManager {
 
   setFloatingIconAutoHide(enabled) {
     this._floatingIconAutoHide = Boolean(enabled);
+  }
+
+  // ---- Dictation-bar snooze -------------------------------------------------
+
+  // Set by main.js to persist state + refresh the tray whenever snooze changes.
+  setSnoozeChangeHandler(handler) {
+    this._onSnoozeChange = typeof handler === "function" ? handler : null;
+  }
+
+  isDictationSnoozed() {
+    const { until, always } = this._dictationSnooze;
+    return Boolean(always || (until != null && Date.now() < until));
+  }
+
+  getDictationSnoozeState() {
+    return {
+      until: this._dictationSnooze.until,
+      always: this._dictationSnooze.always,
+      active: this.isDictationSnoozed(),
+    };
+  }
+
+  // Core mutator. Updates state, (re)schedules the expiry timer, tells the
+  // renderer(s) so the auto-hide effect reacts, and notifies main.js to
+  // persist + refresh the tray. `notify: false` is used on startup restore so
+  // we don't re-persist what we just loaded.
+  _applyDictationSnooze({ until = null, always = false }, { notify = true } = {}) {
+    this._dictationSnooze = { until, always };
+    this._scheduleSnoozeTimer();
+    this._broadcastSnoozeState();
+    if (notify && this._onSnoozeChange) {
+      this._onSnoozeChange(this.getDictationSnoozeState());
+    }
+  }
+
+  snoozeDictationFor(durationMs) {
+    const ms = Number(durationMs);
+    if (!Number.isFinite(ms) || ms <= 0) return this.getDictationSnoozeState();
+    this._applyDictationSnooze({ until: Date.now() + ms, always: false });
+    return this.getDictationSnoozeState();
+  }
+
+  snoozeDictationAlways() {
+    this._applyDictationSnooze({ until: null, always: true });
+    return this.getDictationSnoozeState();
+  }
+
+  // Re-enable the bar (timer expiry, tray "Show", or Settings "Show now").
+  cancelDictationSnooze() {
+    this._applyDictationSnooze({ until: null, always: false });
+    // The renderer's auto-hide effect shows the bar when snooze clears, but
+    // show it here too so re-enabling works even if the panel renderer is slow.
+    this.showDictationPanel();
+    return this.getDictationSnoozeState();
+  }
+
+  // Startup restore from persisted state (main.js passes the saved value).
+  loadDictationSnooze(state) {
+    const until = state && Number.isFinite(state.until) ? state.until : null;
+    const always = Boolean(state && state.always);
+    // Drop expired timed snoozes on load.
+    if (!always && until != null && Date.now() >= until) {
+      this._applyDictationSnooze({ until: null, always: false }, { notify: true });
+      return;
+    }
+    this._applyDictationSnooze({ until, always }, { notify: false });
+  }
+
+  _scheduleSnoozeTimer() {
+    if (this._snoozeTimer) {
+      clearTimeout(this._snoozeTimer);
+      this._snoozeTimer = null;
+    }
+    const { until, always } = this._dictationSnooze;
+    if (always || until == null) return;
+    const remaining = until - Date.now();
+    if (remaining <= 0) return;
+    this._snoozeTimer = setTimeout(() => {
+      this._snoozeTimer = null;
+      this.cancelDictationSnooze();
+    }, remaining);
+  }
+
+  _broadcastSnoozeState() {
+    const state = this.getDictationSnoozeState();
+    for (const win of [this.mainWindow, this.controlPanelWindow]) {
+      if (win && !win.isDestroyed()) {
+        win.webContents.send("dictation-snooze-changed", state);
+      }
+    }
   }
 
   setPanelStartPosition(position) {
@@ -1113,7 +1209,8 @@ class WindowManager {
         this.mainWindow &&
         !this.mainWindow.isDestroyed() &&
         !this.mainWindow.isVisible() &&
-        !this._floatingIconAutoHide
+        !this._floatingIconAutoHide &&
+        !this.isDictationSnoozed()
       ) {
         this.showDictationPanel();
       }
@@ -1122,7 +1219,11 @@ class WindowManager {
     this.mainWindow.once("ready-to-show", () => {
       clearTimeout(showTimeout);
       this.enforceMainWindowOnTop();
-      if (!this.mainWindow.isVisible() && !this._floatingIconAutoHide) {
+      if (
+        !this.mainWindow.isVisible() &&
+        !this._floatingIconAutoHide &&
+        !this.isDictationSnoozed()
+      ) {
         if (typeof this.mainWindow.showInactive === "function") {
           this.mainWindow.showInactive();
         } else {
@@ -1143,6 +1244,7 @@ class WindowManager {
       this.dragManager.cleanup();
       this.mainWindow = null;
     });
+
   }
 
   enforceMainWindowOnTop() {

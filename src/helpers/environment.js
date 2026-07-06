@@ -54,6 +54,8 @@ const PERSISTED_KEYS = [
   "AZURE_OPENAI_API_VERSION",
   "VERTEX_PROJECT",
   "VERTEX_LOCATION",
+  "DICTATION_HIDE_UNTIL",
+  "DICTATION_HIDE_ALWAYS",
 ];
 
 class EnvironmentManager {
@@ -451,6 +453,25 @@ class EnvironmentManager {
 
   saveFloatingIconAutoHide(enabled) {
     const result = this._saveKey("FLOATING_ICON_AUTO_HIDE", String(enabled));
+    this.saveAllKeysToEnvFile().catch(() => {});
+    return result;
+  }
+
+  // Dictation-bar snooze ("Hide for 10 min / 1 hour / until I turn it back on").
+  // `until` is an epoch-ms timestamp for timed snoozes (null when none/always);
+  // `always` is the indefinite "hide until re-enabled" flag.
+  getDictationSnooze() {
+    const rawUntil = this._getKey("DICTATION_HIDE_UNTIL");
+    const until = rawUntil ? Number.parseInt(rawUntil, 10) : NaN;
+    return {
+      until: Number.isFinite(until) ? until : null,
+      always: this._getKey("DICTATION_HIDE_ALWAYS") === "true",
+    };
+  }
+
+  saveDictationSnooze({ until = null, always = false } = {}) {
+    this._saveKey("DICTATION_HIDE_UNTIL", until == null ? "" : String(until));
+    const result = this._saveKey("DICTATION_HIDE_ALWAYS", String(Boolean(always)));
     this.saveAllKeysToEnvFile().catch(() => {});
     return result;
   }

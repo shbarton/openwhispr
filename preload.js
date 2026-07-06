@@ -720,6 +720,16 @@ contextBridge.exposeInMainWorld("electronAPI", {
     (callback) => (_event, enabled) => callback(enabled)
   ),
 
+  // Dictation-bar snooze ("Hide for 10 min / 1 hour / until I turn it back on").
+  // `mode` is a duration in ms, or the string "always".
+  snoozeDictation: (mode) => ipcRenderer.invoke("snooze-dictation", mode),
+  cancelDictationSnooze: () => ipcRenderer.invoke("cancel-dictation-snooze"),
+  getDictationSnooze: () => ipcRenderer.invoke("get-dictation-snooze"),
+  onDictationSnoozeChanged: registerListener(
+    "dictation-snooze-changed",
+    (callback) => (_event, state) => callback(state)
+  ),
+
   // Panel start position
   notifyPanelStartPositionChanged: (position) =>
     ipcRenderer.send("panel-start-position-changed", position),

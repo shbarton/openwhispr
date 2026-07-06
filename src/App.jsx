@@ -17,6 +17,10 @@ import {
 // click is suppressed.
 const DRAG_THRESHOLD_PX = 5;
 
+// Snooze durations offered in the bar's command menu.
+const SNOOZE_TEN_MINUTES_MS = 10 * 60 * 1000;
+const SNOOZE_ONE_HOUR_MS = 60 * 60 * 1000;
+
 // Bars start at zero so the View's `animationTime`-driven shimmer carries
 // the visual until the first sample lands from the analyser (~100ms).
 const ZERO_LEVELS = Object.freeze(Array(12).fill(0));
@@ -80,7 +84,16 @@ export default function App() {
 
   // Floating icon auto-hide setting (read from store, synced via IPC).
   const floatingIconAutoHide = useSettingsStore((s) => s.floatingIconAutoHide);
-  const prevAutoHideRef = useRef(floatingIconAutoHide);
+
+  // Dictation-bar snooze ("Hide for 10 min / 1 hour / until I turn it back on").
+  // Owned by the main process (timer + persistence); the renderer only mirrors
+  // the active flag and folds it into the auto-hide behaviour below.
+  const [dictationSnoozed, setDictationSnoozed] = useState(false);
+
+  // The bar hides while idle if EITHER the user's auto-hide preference is on or
+  // a snooze is active. Recording always shows it (see effect below).
+  const shouldAutoHide = floatingIconAutoHide || dictationSnoozed;
+  const prevAutoHideRef = useRef(shouldAutoHide);
 
   // Initialize vault path for Calyx integration (tags/projects autocomplete)
   const vaultPath = useSettingsStore((s) => s.vaultPath);
@@ -206,6 +219,22 @@ export default function App() {
     return () => unsubscribe?.();
   }, []);
 
+  // Sync snooze state from main process: fetch the current value on mount
+  // (covers a snooze restored from a previous session) and subscribe to changes.
+  useEffect(() => {
+    let active = true;
+    window.electronAPI?.getDictationSnooze?.().then((state) => {
+      if (active) setDictationSnoozed(Boolean(state?.active));
+    });
+    const unsubscribe = window.electronAPI?.onDictationSnoozeChanged?.((state) => {
+      setDictationSnoozed(Boolean(state?.active));
+    });
+    return () => {
+      active = false;
+      unsubscribe?.();
+    };
+  }, []);
+
   const isRecordingRef = useRef(isRecording);
   const isProcessingRef = useRef(isProcessing);
 
@@ -227,25 +256,37 @@ export default function App() {
     return () => unsubscribe?.();
   }, [cancelRecording, cancelProcessing]);
 
-  // Auto-hide the floating icon when idle (setting enabled or dictation cycle completed)
+  // Auto-hide the floating bar when idle — driven by the auto-hide preference
+  // OR an active snooze. Recording/processing always keeps it visible, so the
+  // hotkey still works while snoozed (the bar appears only during a take).
   useEffect(() => {
     let hideTimeout;
 
-    if (floatingIconAutoHide && !isRecording && !isProcessing && toastCount === 0) {
+    if (shouldAutoHide && !isRecording && !isProcessing && toastCount === 0) {
       // Delay briefly so processing can start after recording stops without a flash
       hideTimeout = setTimeout(() => {
         window.electronAPI?.hideWindow?.();
       }, 500);
-    } else if (!floatingIconAutoHide && prevAutoHideRef.current) {
+    } else if (!shouldAutoHide && prevAutoHideRef.current) {
+      // Auto-hide just turned off (preference cleared or snooze ended) — bring
+      // the bar back.
       window.electronAPI?.showDictationPanel?.();
     }
 
-    prevAutoHideRef.current = floatingIconAutoHide;
+    prevAutoHideRef.current = shouldAutoHide;
     return () => clearTimeout(hideTimeout);
-  }, [isRecording, isProcessing, floatingIconAutoHide, toastCount]);
+  }, [isRecording, isProcessing, shouldAutoHide, toastCount]);
 
   const handleClose = () => {
     window.electronAPI.hideWindow();
+  };
+
+  // Snooze the bar from the command menu. `mode` is a duration in ms or
+  // "always"; the main process owns the timer, persistence, and re-show.
+  const handleSnooze = (mode) => {
+    setIsCommandMenuOpen(false);
+    setWindowInteractivity(false);
+    window.electronAPI?.snoozeDictation?.(mode);
   };
 
   useEffect(() => {
@@ -366,6 +407,10 @@ export default function App() {
   );
 
   const onWrapperMouseDown = (e) => {
+    // Clicks inside the command menu are UI interactions, not drag handles.
+    // Starting a window drag here races the menu-close resize and yanks the
+    // window up by the menu height (bug: widget climbs on "Hide for now").
+    if (commandMenuRef.current?.contains(e.target)) return;
     setIsCommandMenuOpen(false);
     dragStartPosRef.current = { x: e.clientX, y: e.clientY };
     hasDraggedRef.current = false;
@@ -475,13 +520,21 @@ export default function App() {
             <div className="h-px bg-border" />
             <button
               className="w-full px-3 py-2 text-left text-sm hover:bg-muted focus:bg-muted focus:outline-none"
-              onClick={() => {
-                setIsCommandMenuOpen(false);
-                setWindowInteractivity(false);
-                handleClose();
-              }}
+              onClick={() => handleSnooze(SNOOZE_TEN_MINUTES_MS)}
             >
-              {t("app.commandMenu.hideForNow")}
+              {t("app.commandMenu.hideTenMinutes")}
+            </button>
+            <button
+              className="w-full px-3 py-2 text-left text-sm hover:bg-muted focus:bg-muted focus:outline-none"
+              onClick={() => handleSnooze(SNOOZE_ONE_HOUR_MS)}
+            >
+              {t("app.commandMenu.hideOneHour")}
+            </button>
+            <button
+              className="w-full px-3 py-2 text-left text-sm hover:bg-muted focus:bg-muted focus:outline-none"
+              onClick={() => handleSnooze("always")}
+            >
+              {t("app.commandMenu.hideAlways")}
             </button>
           </div>
         )}

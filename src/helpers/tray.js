@@ -240,6 +240,9 @@ class TrayManager {
           if (this.windowManager.isDictationPanelVisible()) {
             this.windowManager.hideDictationPanel();
           } else {
+            // Re-enable: clears any active snooze ("Hide for 10 min / 1 hour /
+            // until I turn it back on") and brings the bar back.
+            this.windowManager.cancelDictationSnooze?.();
             this.windowManager.showDictationPanel({ focus: true });
           }
           this.updateTrayMenu();

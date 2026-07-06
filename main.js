@@ -748,6 +748,15 @@ async function startApp() {
   windowManager.setFloatingIconAutoHide(environmentManager.getFloatingIconAutoHide());
   windowManager.setPanelStartPosition(environmentManager.getPanelStartPosition());
 
+  // Dictation-bar snooze: persist + refresh the tray whenever it changes
+  // (from the bar menu, expiry timer, tray, or Settings), then restore any
+  // saved snooze from a previous session.
+  windowManager.setSnoozeChangeHandler((state) => {
+    environmentManager.saveDictationSnooze(state);
+    trayManager?.updateTrayMenu?.();
+  });
+  windowManager.loadDictationSnooze(environmentManager.getDictationSnooze());
+
   ipcMain.on("activation-mode-changed", (_event, mode) => {
     windowManager.setActivationModeCache(mode);
     environmentManager.saveActivationMode(mode);
@@ -760,6 +769,22 @@ async function startApp() {
     if (windowManager.mainWindow && !windowManager.mainWindow.isDestroyed()) {
       windowManager.mainWindow.webContents.send("floating-icon-auto-hide-changed", enabled);
     }
+  });
+
+  // Dictation-bar snooze actions (from the bar's right-click menu, the tray,
+  // or the Settings page). Persistence + tray refresh happen via the snooze
+  // change handler wired above; here we just drive windowManager state.
+  ipcMain.handle("snooze-dictation", (_event, mode) => {
+    if (mode === "always") {
+      return windowManager.snoozeDictationAlways();
+    }
+    return windowManager.snoozeDictationFor(mode);
+  });
+  ipcMain.handle("cancel-dictation-snooze", () => {
+    return windowManager.cancelDictationSnooze();
+  });
+  ipcMain.handle("get-dictation-snooze", () => {
+    return windowManager.getDictationSnoozeState();
   });
 
   ipcMain.on("start-minimized-changed", (_event, enabled) => {

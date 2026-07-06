@@ -1365,7 +1365,11 @@
         "center": "Bottom Center",
         "bottomLeft": "Bottom Left",
         "description": "Control when the dictation icon is visible on your screen",
-        "title": "Floating Icon"
+        "title": "Floating Icon",
+        "snoozeStatusLabel": "Dictation bar hidden",
+        "snoozeHiddenUntil": "Hidden until {{time}}. Dictation still works — the bar appears only while you record.",
+        "snoozeHiddenAlways": "Hidden until you turn it back on. Dictation still works — the bar appears only while you record.",
+        "snoozeShowNow": "Show now"
       },
       "hotkey": {
         "activationMode": "Activation Mode",
@@ -2234,7 +2238,10 @@
     "commandMenu": {
       "stopListening": "Stop listening",
       "startListening": "Start listening",
-      "hideForNow": "Hide for now"
+      "hideForNow": "Hide for now",
+      "hideTenMinutes": "Hide for 10 minutes",
+      "hideOneHour": "Hide for 1 hour",
+      "hideAlways": "Hide until I turn it back on"
     }
   },
   "dictationAgent": {

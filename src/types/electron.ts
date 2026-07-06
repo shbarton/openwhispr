@@ -1,5 +1,14 @@
 export type LocalTranscriptionProvider = "whisper" | "nvidia";
 
+// Dictation-bar snooze state. `until` is an epoch-ms deadline for timed
+// snoozes (null when none or "always"); `always` is the indefinite
+// "hide until re-enabled" flag; `active` is the derived current state.
+export interface DictationSnoozeState {
+  until: number | null;
+  always: boolean;
+  active: boolean;
+}
+
 // ─────────────────────────────────────────────────────────────────────
 // CLI Agent (post-meeting Claude subprocess)
 // ─────────────────────────────────────────────────────────────────────
@@ -1074,6 +1083,15 @@ declare global {
       notifyFloatingIconAutoHideChanged?: (enabled: boolean) => void;
       onFloatingIconAutoHideChanged?: (callback: (enabled: boolean) => void) => () => void;
 
+      // Dictation-bar snooze ("Hide for 10 min / 1 hour / until I turn it back on")
+      snoozeDictation?: (
+        mode: number | "always"
+      ) => Promise<DictationSnoozeState>;
+      cancelDictationSnooze?: () => Promise<DictationSnoozeState>;
+      getDictationSnooze?: () => Promise<DictationSnoozeState>;
+      onDictationSnoozeChanged?: (
+        callback: (state: DictationSnoozeState) => void
+      ) => () => void;
       notifyStartMinimizedChanged?: (enabled: boolean) => void;
       notifyPanelStartPositionChanged?: (position: string) => void;
 

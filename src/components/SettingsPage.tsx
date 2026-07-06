@@ -87,7 +87,12 @@ import { Skeleton } from "./ui/skeleton";
 import { Progress } from "./ui/progress";
 import { useToast } from "./ui/useToast";
 import { useTheme } from "../hooks/useTheme";
-import type { GpuDevice, LocalTranscriptionProvider, InferenceMode } from "../types/electron";
+import type {
+  GpuDevice,
+  LocalTranscriptionProvider,
+  InferenceMode,
+  DictationSnoozeState,
+} from "../types/electron";
 import logger from "../utils/logger";
 import { SettingsRow, InferenceModeSelector } from "./ui/SettingsSection";
 import type { InferenceModeOption } from "./ui/SettingsSection";
@@ -705,6 +710,23 @@ export default function SettingsPage({
 
   const [currentVersion, setCurrentVersion] = useState<string>("");
   const [isRemovingModels, setIsRemovingModels] = useState(false);
+
+  // Dictation-bar snooze status (owned by the main process). Mirrored here so
+  // the Floating Bar section can show "Hidden until …" with a re-enable button.
+  const [dictationSnooze, setDictationSnoozeState] = useState<DictationSnoozeState | null>(null);
+  useEffect(() => {
+    let active = true;
+    window.electronAPI?.getDictationSnooze?.().then((state) => {
+      if (active) setDictationSnoozeState(state ?? null);
+    });
+    const unsubscribe = window.electronAPI?.onDictationSnoozeChanged?.((state) => {
+      setDictationSnoozeState(state);
+    });
+    return () => {
+      active = false;
+      unsubscribe?.();
+    };
+  }, []);
   const cachePathHint =
     typeof navigator !== "undefined" && /Windows/i.test(navigator.userAgent)
       ? "%USERPROFILE%\\.cache\\openwhispr"
@@ -2322,6 +2344,33 @@ export default function SettingsPage({
                     <Toggle checked={floatingIconAutoHide} onChange={setFloatingIconAutoHide} />
                   </SettingsRow>
                 </SettingsPanelRow>
+                {dictationSnooze?.active && (
+                  <SettingsPanelRow>
+                    <SettingsRow
+                      label={t("settingsPage.general.floatingIcon.snoozeStatusLabel")}
+                      description={
+                        dictationSnooze.always
+                          ? t("settingsPage.general.floatingIcon.snoozeHiddenAlways")
+                          : t("settingsPage.general.floatingIcon.snoozeHiddenUntil", {
+                              time: dictationSnooze.until
+                                ? new Date(dictationSnooze.until).toLocaleTimeString([], {
+                                    hour: "numeric",
+                                    minute: "2-digit",
+                                  })
+                                : "",
+                            })
+                      }
+                    >
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        onClick={() => window.electronAPI?.cancelDictationSnooze?.()}
+                      >
+                        {t("settingsPage.general.floatingIcon.snoozeShowNow")}
+                      </Button>
+                    </SettingsRow>
+                  </SettingsPanelRow>
+                )}
                 <SettingsPanelRow>
                   <SettingsRow
                     label={t("settingsPage.general.floatingIcon.startPosition")}
