@@ -1506,8 +1506,15 @@ declare global {
           name: string;
           source: "user" | "project";
           kind: "skill" | "command";
+          description?: string;
         }>
       >;
+      cliAgentReadSkill?: (payload: {
+        name: string;
+        kind: "skill" | "command";
+        source: "user" | "project";
+        cwd?: string;
+      }) => Promise<{ content: string | null; path?: string }>;
       cliAgentPrepareMeeting?: (payload: {
         noteId?: number | string;
         transcript: string;

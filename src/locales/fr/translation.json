@@ -1770,7 +1770,17 @@
     "searchChats": "Rechercher",
     "searchTitle": "Rechercher des conversations",
     "searchDescription": "Rechercher dans toutes vos conversations",
-    "newChatEmpty": "Posez des questions sur vos notes, transcriptions ou autre"
+    "newChatEmpty": "Posez des questions sur vos notes, transcriptions ou autre",
+    "skills": {
+      "sectionSkills": "Compétences",
+      "sectionCommands": "Commandes",
+      "noMatches": "Aucune compétence correspondante",
+      "sourceProject": "projet",
+      "hintNavigate": "↑↓ pour naviguer",
+      "hintSelect": "↵ pour sélectionner",
+      "hintDismiss": "échap pour fermer",
+      "removeSkill": "Retirer la compétence"
+    }
   },
   "referral": {
     "title": "Parrainez et gagnez des récompenses",

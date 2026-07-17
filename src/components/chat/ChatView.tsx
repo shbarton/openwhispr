@@ -10,6 +10,8 @@ import EmptyChatState from "./EmptyChatState";
 import { ConfirmDialog } from "../ui/dialog";
 import { useDialogs } from "../../hooks/useDialogs";
 import { getCachedPlatform } from "../../utils/platform";
+import { useSkillPalette, buildSkillPrompt } from "./SkillPalette";
+import { useSettingsStore } from "../../stores/settingsStore";
 
 const CommandSearch = lazy(() => import("../CommandSearch"));
 
@@ -33,7 +35,10 @@ export default function ChatView() {
   const [isNewChat, setIsNewChat] = useState(true);
   const [refreshKey, setRefreshKey] = useState(0);
   const [showSearch, setShowSearch] = useState(false);
+  const [inputValue, setInputValue] = useState("");
   const { confirmDialog, showConfirmDialog, hideConfirmDialog } = useDialogs();
+  const vaultPath = useSettingsStore((s) => s.vaultPath);
+  const skillPalette = useSkillPalette({ inputValue, setInputValue, vaultPath });
 
   const persistence = useChatPersistence({
     conversationId: activeConversationId,
@@ -70,25 +75,38 @@ export default function ChatView() {
   const handleTextSubmit = useCallback(
     async (text: string) => {
       setIsNewChat(false);
+
+      // A picked skill rides along as a chip. The visible/persisted message
+      // stays short (`/skill-name text`) while the LLM-facing copy carries
+      // the skill's full instructions.
+      const picked = await skillPalette.consumeActiveSkill();
+      const displayText = picked
+        ? `/${picked.skill.name}${text ? ` ${text}` : ""}`
+        : text;
+      const llmText = picked?.content
+        ? buildSkillPrompt(picked.skill.name, picked.content, text)
+        : displayText;
+
       let convId = activeConversationId;
       if (!convId) {
-        const title = text.length > 50 ? `${text.slice(0, 50)}...` : text;
+        const title =
+          displayText.length > 50 ? `${displayText.slice(0, 50)}...` : displayText;
         convId = await persistence.createConversation(title);
       }
 
       const userMsg = {
         id: crypto.randomUUID(),
         role: "user" as const,
-        content: text,
+        content: displayText,
         isStreaming: false,
       };
       persistence.setMessages((prev) => [...prev, userMsg]);
-      await persistence.saveUserMessage(text);
+      await persistence.saveUserMessage(displayText);
 
-      const allMessages = [...persistence.messages, userMsg];
-      await streaming.sendToAI(text, allMessages);
+      const allMessages = [...persistence.messages, { ...userMsg, content: llmText }];
+      await streaming.sendToAI(displayText, allMessages);
     },
-    [activeConversationId, persistence, streaming]
+    [activeConversationId, persistence, streaming, skillPalette]
   );
 
   const handleArchive = useCallback(
@@ -171,13 +189,21 @@ export default function ChatView() {
           {hasActiveChat ? (
             <>
               <ChatMessages messages={persistence.messages} emptyState={<NewChatEmptyState />} />
-              <ChatInput
-                agentState={streaming.agentState}
-                partialTranscript=""
-                onTextSubmit={handleTextSubmit}
-                onCancel={streaming.cancelStream}
-                autoFocus={isNewChat}
-              />
+              <div className="relative">
+                {skillPalette.palette}
+                {skillPalette.chip}
+                <ChatInput
+                  agentState={streaming.agentState}
+                  partialTranscript=""
+                  onTextSubmit={handleTextSubmit}
+                  onCancel={streaming.cancelStream}
+                  autoFocus={isNewChat}
+                  value={inputValue}
+                  onValueChange={setInputValue}
+                  onKeyDownIntercept={skillPalette.onKeyDownIntercept}
+                  canSubmitEmpty={skillPalette.activeSkill !== null}
+                />
+              </div>
             </>
           ) : (
             <EmptyChatState />

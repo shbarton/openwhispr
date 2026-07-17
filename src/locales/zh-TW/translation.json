@@ -2051,7 +2051,17 @@
     "searchChats": "搜尋聊天",
     "searchTitle": "搜尋對話",
     "searchDescription": "搜尋所有對話",
-    "newChatEmpty": "詢問關於筆記、轉錄或其他任何內容"
+    "newChatEmpty": "詢問關於筆記、轉錄或其他任何內容",
+    "skills": {
+      "sectionSkills": "技能",
+      "sectionCommands": "命令",
+      "noMatches": "沒有符合的技能",
+      "sourceProject": "專案",
+      "hintNavigate": "↑↓ 導覽",
+      "hintSelect": "↵ 選取",
+      "hintDismiss": "esc 關閉",
+      "removeSkill": "移除技能"
+    }
   },
   "usage": {
     "approachingLimit": "即將達到每週上限",

@@ -2056,7 +2056,17 @@
     "searchChats": "Chats suchen",
     "searchTitle": "Unterhaltungen suchen",
     "searchDescription": "In allen Unterhaltungen suchen",
-    "newChatEmpty": "Fragen Sie zu Ihren Notizen, Transkripten oder anderem"
+    "newChatEmpty": "Fragen Sie zu Ihren Notizen, Transkripten oder anderem",
+    "skills": {
+      "sectionSkills": "Skills",
+      "sectionCommands": "Befehle",
+      "noMatches": "Keine passenden Skills",
+      "sourceProject": "Projekt",
+      "hintNavigate": "↑↓ zum Navigieren",
+      "hintSelect": "↵ zum Auswählen",
+      "hintDismiss": "Esc zum Schließen",
+      "removeSkill": "Skill entfernen"
+    }
   },
   "usage": {
     "approachingLimit": "Wochenlimit fast erreicht",

@@ -24,6 +24,11 @@ interface ChatInputProps {
    * skip its own logic). Used to wire up autocomplete keyboard navigation.
    */
   onKeyDownIntercept?: (e: React.KeyboardEvent<HTMLTextAreaElement>) => boolean;
+  /**
+   * Allow submitting with an empty textarea. Used when an attachment-like
+   * payload (e.g. a picked skill chip) makes an empty message meaningful.
+   */
+  canSubmitEmpty?: boolean;
 }
 
 function RecordingIndicator() {
@@ -63,6 +68,7 @@ export function ChatInput({
   value,
   onValueChange,
   onKeyDownIntercept,
+  canSubmitEmpty = false,
 }: ChatInputProps) {
   const { t } = useTranslation();
   const [internalText, setInternalText] = useState("");
@@ -83,11 +89,11 @@ export function ChatInput({
 
   const handleSubmit = useCallback(() => {
     const text = inputText.trim();
-    if (!text || !onTextSubmit) return;
+    if (!onTextSubmit || (!text && !canSubmitEmpty)) return;
     onTextSubmit(text);
     setInputText("");
     requestAnimationFrame(() => inputRef.current?.focus());
-  }, [inputText, onTextSubmit, setInputText]);
+  }, [inputText, onTextSubmit, setInputText, canSubmitEmpty]);
 
   const handleKeyDown = useCallback(
     (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
@@ -185,7 +191,7 @@ export function ChatInput({
                 );
               }
               if (isIdle) {
-                const hasText = inputText.trim().length > 0;
+                const hasText = inputText.trim().length > 0 || canSubmitEmpty;
                 return (
                   <button
                     onClick={handleSubmit}

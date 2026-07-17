@@ -2056,7 +2056,17 @@
     "searchChats": "Cerca chat",
     "searchTitle": "Cerca conversazioni",
     "searchDescription": "Cerca in tutte le conversazioni",
-    "newChatEmpty": "Chiedi delle tue note, trascrizioni o qualsiasi altra cosa"
+    "newChatEmpty": "Chiedi delle tue note, trascrizioni o qualsiasi altra cosa",
+    "skills": {
+      "sectionSkills": "Competenze",
+      "sectionCommands": "Comandi",
+      "noMatches": "Nessuna competenza corrispondente",
+      "sourceProject": "progetto",
+      "hintNavigate": "↑↓ per navigare",
+      "hintSelect": "↵ per selezionare",
+      "hintDismiss": "esc per chiudere",
+      "removeSkill": "Rimuovi competenza"
+    }
   },
   "usage": {
     "approachingLimit": "Limite settimanale quasi raggiunto",

@@ -6021,7 +6021,65 @@ class IPCHandlers {
     // ─────────────────────────────────────────────────────────────────────
     // CLI Agent (post-meeting Claude subprocess)
     // ─────────────────────────────────────────────────────────────────────
-    //
+
+    // Read only the head of a skill/command file — enough for frontmatter +
+    // a first line, without loading 50KB skill bodies during a directory scan.
+    const readSkillFileHead = async (filePath, bytes = 4096) => {
+      const fh = await fs.promises.open(filePath, "r");
+      try {
+        const buf = Buffer.alloc(bytes);
+        const { bytesRead } = await fh.read(buf, 0, bytes, 0);
+        return buf.toString("utf-8", 0, bytesRead);
+      } finally {
+        await fh.close();
+      }
+    };
+
+    // Pull a one-line description out of SKILL.md-style frontmatter
+    // (`description: ...`, including folded `>-` blocks), falling back to
+    // the first non-empty body line.
+    const extractSkillDescription = (head) => {
+      if (!head) return null;
+      const text = head.replace(/^\uFEFF/, "");
+      const firstBodyLine = (body) => {
+        for (const line of body.split("\n")) {
+          const l = line.trim();
+          if (!l || l === "---") continue;
+          return l.replace(/^#+\s*/, "").slice(0, 200);
+        }
+        return null;
+      };
+      if (!text.startsWith("---")) return firstBodyLine(text);
+      const end = text.indexOf("\n---", 3);
+      if (end === -1) return null; // frontmatter longer than the head we read
+      const fmLines = text.slice(3, end).split("\n");
+      for (let i = 0; i < fmLines.length; i++) {
+        const m = fmLines[i].match(/^description:\s*(.*)$/);
+        if (!m) continue;
+        let value = m[1].trim();
+        if (value === "" || /^[>|][+-]?$/.test(value)) {
+          // Folded/literal YAML block — gather the indented continuation lines.
+          const parts = [];
+          for (let j = i + 1; j < fmLines.length && /^\s+\S/.test(fmLines[j]); j++) {
+            parts.push(fmLines[j].trim());
+          }
+          value = parts.join(" ");
+        }
+        value = value.replace(/^["']|["']$/g, "").trim();
+        return value ? value.slice(0, 200) : null;
+      }
+      return firstBodyLine(text.slice(end + 4));
+    };
+
+    const stripSkillFrontmatter = (raw) => {
+      const text = raw.replace(/^\uFEFF/, "");
+      if (!text.startsWith("---")) return text.trim();
+      const end = text.indexOf("\n---", 3);
+      if (end === -1) return text.trim();
+      const closeLineEnd = text.indexOf("\n", end + 4);
+      return (closeLineEnd === -1 ? "" : text.slice(closeLineEnd + 1)).trim();
+    };
+
     // Enumerate the user's installed Claude Code slash commands and skills
     // so the renderer can render an autocomplete dropdown when the user
     // types `/`. Reads from ~/.claude/{skills,commands}/ (and the cwd's
@@ -6029,7 +6087,7 @@ class IPCHandlers {
     ipcMain.handle(
       "cli-agent-list-skills",
       async (_event, { cwd } = {}) => {
-        const skills = new Map(); // name → { source: "user"|"project", kind: "skill"|"command" }
+        const skills = new Map(); // name → { source, kind, description }
 
         const tryReadDir = async (dir, source, kind) => {
           try {
@@ -6038,12 +6096,14 @@ class IPCHandlers {
             });
             for (const entry of entries) {
               let name = null;
+              let filePath = null;
               if (kind === "skill" && entry.isDirectory()) {
                 // Skill directories contain SKILL.md
                 const skillFile = path.join(dir, entry.name, "SKILL.md");
                 try {
                   await fs.promises.access(skillFile);
                   name = entry.name;
+                  filePath = skillFile;
                 } catch {
                   // skip — directory without SKILL.md
                 }
@@ -6053,9 +6113,22 @@ class IPCHandlers {
                 entry.name.endsWith(".md")
               ) {
                 name = entry.name.replace(/\.md$/, "");
+                filePath = path.join(dir, entry.name);
               }
               if (name && !name.startsWith("_") && !skills.has(name)) {
-                skills.set(name, { source, kind });
+                let description = null;
+                try {
+                  description = extractSkillDescription(
+                    await readSkillFileHead(filePath)
+                  );
+                } catch {
+                  // unreadable file — list it without a description
+                }
+                skills.set(name, {
+                  source,
+                  kind,
+                  ...(description ? { description } : {}),
+                });
               }
             }
           } catch {
@@ -6083,6 +6156,49 @@ class IPCHandlers {
         return Array.from(skills.entries())
           .map(([name, meta]) => ({ name, ...meta }))
           .sort((a, b) => a.name.localeCompare(b.name));
+      }
+    );
+
+    // Read one skill/command's markdown body (frontmatter stripped). The
+    // API-backed chat has no CLI subprocess to expand `/skill-name`, so the
+    // renderer fetches the instructions and inlines them into the prompt.
+    ipcMain.handle(
+      "cli-agent-read-skill",
+      async (_event, { name, kind, source, cwd } = {}) => {
+        if (
+          !name ||
+          typeof name !== "string" ||
+          name.includes("/") ||
+          name.includes("\\") ||
+          name.includes("..") ||
+          name.startsWith(".")
+        ) {
+          return { content: null };
+        }
+        const root =
+          source === "project" && cwd && typeof cwd === "string"
+            ? path.join(cwd, ".claude")
+            : path.join(os.homedir(), ".claude");
+        const filePath =
+          kind === "skill"
+            ? path.join(root, "skills", name, "SKILL.md")
+            : path.join(root, "commands", `${name}.md`);
+        if (!filePath.startsWith(root + path.sep)) {
+          return { content: null };
+        }
+        try {
+          const raw = await fs.promises.readFile(filePath, "utf-8");
+          let content = stripSkillFrontmatter(raw);
+          const MAX_SKILL_CHARS = 32000;
+          if (content.length > MAX_SKILL_CHARS) {
+            content =
+              content.slice(0, MAX_SKILL_CHARS) +
+              "\n\n[skill content truncated]";
+          }
+          return { content, path: filePath };
+        } catch {
+          return { content: null };
+        }
       }
     );
 

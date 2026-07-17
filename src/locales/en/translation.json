@@ -1818,7 +1818,17 @@
     "searchChats": "Search chats",
     "searchTitle": "Search conversations",
     "searchDescription": "Search across all your conversations",
-    "newChatEmpty": "Ask about your notes, transcripts, or anything else"
+    "newChatEmpty": "Ask about your notes, transcripts, or anything else",
+    "skills": {
+      "sectionSkills": "Skills",
+      "sectionCommands": "Commands",
+      "noMatches": "No matching skills",
+      "sourceProject": "project",
+      "hintNavigate": "↑↓ to navigate",
+      "hintSelect": "↵ to select",
+      "hintDismiss": "esc to dismiss",
+      "removeSkill": "Remove skill"
+    }
   },
   "referral": {
     "title": "Refer and earn rewards",

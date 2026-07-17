@@ -2056,7 +2056,17 @@
     "searchChats": "チャットを検索",
     "searchTitle": "会話を検索",
     "searchDescription": "すべての会話を検索",
-    "newChatEmpty": "ノートや文字起こし、その他なんでも聞いてください"
+    "newChatEmpty": "ノートや文字起こし、その他なんでも聞いてください",
+    "skills": {
+      "sectionSkills": "スキル",
+      "sectionCommands": "コマンド",
+      "noMatches": "一致するスキルがありません",
+      "sourceProject": "プロジェクト",
+      "hintNavigate": "↑↓で移動",
+      "hintSelect": "↵で選択",
+      "hintDismiss": "escで閉じる",
+      "removeSkill": "スキルを削除"
+    }
   },
   "usage": {
     "approachingLimit": "週間制限に近づいています",

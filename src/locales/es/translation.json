@@ -2104,7 +2104,17 @@
     "searchChats": "Buscar chats",
     "searchTitle": "Buscar conversaciones",
     "searchDescription": "Buscar en todas tus conversaciones",
-    "newChatEmpty": "Pregunta sobre tus notas, transcripciones o lo que quieras"
+    "newChatEmpty": "Pregunta sobre tus notas, transcripciones o lo que quieras",
+    "skills": {
+      "sectionSkills": "Habilidades",
+      "sectionCommands": "Comandos",
+      "noMatches": "No hay habilidades que coincidan",
+      "sourceProject": "proyecto",
+      "hintNavigate": "↑↓ para navegar",
+      "hintSelect": "↵ para seleccionar",
+      "hintDismiss": "esc para cerrar",
+      "removeSkill": "Quitar habilidad"
+    }
   },
   "usage": {
     "approachingLimit": "Cerca del límite semanal",

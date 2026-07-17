@@ -596,7 +596,7 @@ All user-facing strings **must** use the i18n system. Never hardcode UI text in 
 
 **Setup**: react-i18next (v15) with i18next (v25). Translation files in `src/locales/{lang}/translation.json`.
 
-**Supported languages**: en, es, fr, de, pt, it, ru, zh-CN, zh-TW
+**Supported languages**: en, es, fr, de, pt, it, ja, ru, zh-CN, zh-TW
 
 **How to use**:
 ```tsx
@@ -772,7 +772,7 @@ const { t } = useTranslation();
 
 - Streaming transcription support
 - Custom wake word detection
-- ~~Multi-language UI~~ (implemented — 9 languages via react-i18next)
+- ~~Multi-language UI~~ (implemented — 10 languages via react-i18next)
 - Cloud model selection
 - Batch transcription
 - Export formats beyond clipboard
