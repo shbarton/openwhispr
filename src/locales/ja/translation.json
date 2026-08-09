@@ -1720,6 +1720,20 @@
       "showInFileManager": "{{manager}}で表示",
       "openInCalyx": "Calyxで開く"
     },
+    "chat": {
+      "emptyMeeting": "この会議を掘り下げる準備ができました",
+      "emptyNote": "このノートを掘り下げる準備ができました",
+      "setupTitle": "Claudeを接続してチャット",
+      "setupBody": "設定でAIエージェントを有効にすると、ノートとチャットできます。",
+      "suggest": {
+        "summarise": "要約",
+        "actionItems": "アクションアイテム",
+        "followUps": "フォローアップ",
+        "summariseNote": "このノートを要約",
+        "extractTasks": "タスクを抽出",
+        "keyIdeas": "重要なポイント"
+      }
+    },
     "actions": {
       "manage": "アクションを管理...",
       "manageTitle": "カスタムアクション",

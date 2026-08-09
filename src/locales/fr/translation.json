@@ -2013,6 +2013,20 @@
       "showInFileManager": "Afficher dans {{manager}}",
       "openInCalyx": "Ouvrir dans Calyx"
     },
+    "chat": {
+      "emptyMeeting": "Prêt à explorer cette réunion",
+      "emptyNote": "Prêt à explorer cette note",
+      "setupTitle": "Connectez Claude pour discuter",
+      "setupBody": "Activez l'agent IA dans les Réglages pour discuter avec vos notes.",
+      "suggest": {
+        "summarise": "Résumer",
+        "actionItems": "Actions",
+        "followUps": "Suivis",
+        "summariseNote": "Résumer cette note",
+        "extractTasks": "Extraire les tâches",
+        "keyIdeas": "Idées clés"
+      }
+    },
     "actions": {
       "done": "Terminé",
       "manage": "Gérer les actions...",

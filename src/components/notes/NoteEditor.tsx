@@ -15,6 +15,7 @@ import {
   Check,
   Pencil,
   MoreHorizontal,
+  X,
 } from "lucide-react";
 import { RichTextEditor } from "../ui/RichTextEditor";
 import type { Editor } from "@tiptap/react";
@@ -32,9 +33,8 @@ import type { NoteItem, FolderItem } from "../../types/electron";
 import type { ActionProcessingState } from "../../hooks/useActionProcessing";
 import ActionProcessingOverlay from "./ActionProcessingOverlay";
 import NoteBottomBar from "./NoteBottomBar";
-import EmbeddedChat, { type EmbeddedChatMode } from "./EmbeddedChat";
-import { useEmbeddedChat } from "../../hooks/useEmbeddedChat";
-import MeetingEmbeddedChat from "./MeetingEmbeddedChat";
+import { type EmbeddedChatMode } from "./EmbeddedChat";
+import NoteEmbeddedChat from "./NoteEmbeddedChat";
 import { useSettingsStore } from "../../stores/settingsStore";
 import { formatHotkeySymbols } from "../../utils/hotkeys";
 import { normalizeDbDate } from "../../utils/dateFormatting";
@@ -168,19 +168,13 @@ export default function NoteEditor({
   const editorRef = useRef<Editor | null>(null);
   const displaySegmentsRef = useRef<TranscriptSegment[]>([]);
 
-  const embeddedChat = useEmbeddedChat({
-    noteId: note.id,
-    folderId: note.folder_id,
-    noteTitle: note.title,
-    noteContent: note.content,
-    noteTranscript: note.transcript ?? undefined,
-  });
   const agentEnabled = useSettingsStore((s) => s.agentEnabled);
-  // Meeting notes with the agent enabled use the CLI-backed embedded chat
-  // (Claude Code subprocess) — everything else stays on the existing
-  // Vercel-AI-SDK-backed flow above.
+  // One chat everywhere: every note uses the CLI-backed (Claude Code
+  // subprocess) embedded chat when the agent is enabled. Note type only
+  // tunes the suggestion chips and prompt wording — never the backend.
+  // (Unified 2026-08-10; the API-backed chat path is gone.)
   const isMeetingNote = note.note_type === "meeting";
-  const useCliChat = isMeetingNote && agentEnabled;
+  const useCliChat = agentEnabled;
   // Display-only mirror of the user's meeting hotkey — actual firing is
   // handled globally by `meetingHotkeyCallback` in main.js.
   const meetingKey = useSettingsStore((s) => s.meetingKey);
@@ -219,7 +213,6 @@ export default function NoteEditor({
   }, [note.id, notifyFileUnavailable]);
   const titleRef = useRef<HTMLDivElement>(null);
   const prevNoteIdRef = useRef<number>(note.id);
-  const autoShowDoneRef = useRef(false);
 
   const segmentContainerRef = useRef<HTMLDivElement>(null);
   const [indicatorStyle, setIndicatorStyle] = useState<React.CSSProperties>({ opacity: 0 });
@@ -336,7 +329,6 @@ export default function NoteEditor({
   useEffect(() => {
     if (note.id !== prevNoteIdRef.current) {
       prevNoteIdRef.current = note.id;
-      autoShowDoneRef.current = false;
       return scheduleUiUpdate(() => {
         // Every note opens with the chat in the sidebar so all notes share
         // the same AI affordance (collapse to the rail to hide it).
@@ -363,17 +355,6 @@ export default function NoteEditor({
     });
     refreshSpeakerProfiles();
   }, [note.id, refreshSpeakerProfiles]);
-
-  useEffect(() => {
-    if (
-      !autoShowDoneRef.current &&
-      embeddedChat.activeConversationId &&
-      embeddedChat.messages.length > 0
-    ) {
-      autoShowDoneRef.current = true;
-      return scheduleUiUpdate(() => setChatMode("sidebar"));
-    }
-  }, [embeddedChat.activeConversationId, embeddedChat.messages.length, scheduleUiUpdate]);
 
   useEffect(() => {
     if (titleRef.current && titleRef.current.textContent !== note.title) {
@@ -627,23 +608,6 @@ export default function NoteEditor({
     },
     [enhancement]
   );
-
-  const handleAskSubmit = useCallback(
-    (text: string) => {
-      if (chatMode === "hidden") {
-        // Chat always opens as a sidebar (all note types).
-        setChatMode("sidebar");
-      }
-      embeddedChat.sendMessage(text);
-    },
-    [chatMode, embeddedChat]
-  );
-
-  const handleChatInputFocus = useCallback(() => {
-    if (chatMode === "hidden") {
-      setChatMode("sidebar");
-    }
-  }, [chatMode]);
 
   const noteDate = formatNoteDate(note.created_at);
   const shortDate = formatShortDate(note.created_at);
@@ -1023,59 +987,48 @@ export default function NoteEditor({
             isProcessing={isProcessing}
             onStartRecording={onStartRecording}
             onStopRecording={onStopRecording}
-            onAskSubmit={handleAskSubmit}
-            onInputFocus={handleChatInputFocus}
+            onAskSubmit={() => {}}
             actionPicker={isRecording ? undefined : actionPicker}
-            // For meeting notes, the bottom "Ask anything" affordance is
-            // suppressed entirely — chat is sidebar-or-hidden, never a
-            // bottom-bar collapsed form. For other notes, hide while the
-            // chat panel is open as before.
-            hideInput={useCliChat || chatMode !== "hidden"}
+            // The bottom "Ask anything" affordance is suppressed everywhere —
+            // chat is sidebar-or-hidden on every note type, reached via the
+            // collapsed rail. (One chat, one entry point.)
+            hideInput
             meetingMode={isMeetingNote}
             recordShortcutLabel={recordShortcutLabel}
           />
-          {/* Floating mode is only used by the API-backed flow. Meeting
-              notes never enter floating — they coerce to sidebar in the
-              hooks above, but guard here too. */}
-          {!useCliChat && chatMode === "floating" && (
-            <EmbeddedChat
-              mode="floating"
-              onModeChange={setChatMode}
-              messages={embeddedChat.messages}
-              agentState={embeddedChat.agentState}
-              onTextSubmit={embeddedChat.sendMessage}
-              onCancel={embeddedChat.cancelStream}
-              noteConversations={embeddedChat.noteConversations}
-              activeConversationId={embeddedChat.activeConversationId}
-              onSwitchConversation={embeddedChat.switchConversation}
-              onNewChat={embeddedChat.startNewChat}
-            />
-          )}
         </div>
       </div>
-      {/* Right side of the note: either the full chat sidebar, or — for
-          meeting notes only — a thin collapsed rail when chat is hidden.
-          Non-meeting notes simply render nothing when hidden. */}
+      {/* Right side of the note: the Claude chat sidebar (every note type),
+          or the thin collapsed rail when hidden. If the agent isn't
+          configured, expanding shows a setup pointer instead of a chat. */}
       {chatMode === "sidebar" &&
         (useCliChat ? (
-          <MeetingEmbeddedChat
+          <NoteEmbeddedChat
             note={note}
+            isMeetingNote={isMeetingNote}
             mode="sidebar"
             onModeChange={setChatMode}
           />
         ) : (
-          <EmbeddedChat
-            mode="sidebar"
-            onModeChange={setChatMode}
-            messages={embeddedChat.messages}
-            agentState={embeddedChat.agentState}
-            onTextSubmit={embeddedChat.sendMessage}
-            onCancel={embeddedChat.cancelStream}
-            noteConversations={embeddedChat.noteConversations}
-            activeConversationId={embeddedChat.activeConversationId}
-            onSwitchConversation={embeddedChat.switchConversation}
-            onNewChat={embeddedChat.startNewChat}
-          />
+          <div className="w-85 shrink-0 border-l border-border/25 dark:border-white/10 bg-surface-1 dark:bg-surface-2 flex flex-col min-h-0">
+            <div className="flex items-center justify-end px-3 py-2 border-b border-border/10 dark:border-white/5">
+              <button
+                onClick={() => setChatMode("hidden")}
+                className="h-5 w-5 flex items-center justify-center rounded text-foreground/40 hover:text-foreground/70 hover:bg-foreground/5 transition-colors"
+                aria-label={t("common.close")}
+              >
+                <X size={12} />
+              </button>
+            </div>
+            <div className="flex-1 flex flex-col items-center justify-center px-6 text-center gap-2">
+              <p className="text-xs font-medium text-foreground/70">
+                {t("notes.chat.setupTitle")}
+              </p>
+              <p className="text-[11px] text-foreground/45 leading-relaxed">
+                {t("notes.chat.setupBody")}
+              </p>
+            </div>
+          </div>
         ))}
       {chatMode === "hidden" && (
         <MeetingChatRail onExpand={() => setChatMode("sidebar")} />

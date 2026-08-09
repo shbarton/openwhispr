@@ -1871,6 +1871,20 @@
       "showInFileManager": "Показать в {{manager}}",
       "openInCalyx": "Открыть в Calyx"
     },
+    "chat": {
+      "emptyMeeting": "Готов разобрать эту встречу",
+      "emptyNote": "Готов разобрать эту заметку",
+      "setupTitle": "Подключите Claude для чата",
+      "setupBody": "Включите ИИ-агента в настройках, чтобы общаться с заметками.",
+      "suggest": {
+        "summarise": "Резюме",
+        "actionItems": "Задачи",
+        "followUps": "Дальнейшие шаги",
+        "summariseNote": "Резюме заметки",
+        "extractTasks": "Извлечь задачи",
+        "keyIdeas": "Ключевые идеи"
+      }
+    },
     "actions": {
       "manage": "Управление действиями...",
       "manageTitle": "Пользовательские действия",

@@ -1871,6 +1871,20 @@
       "showInFileManager": "Im {{manager}} anzeigen",
       "openInCalyx": "In Calyx öffnen"
     },
+    "chat": {
+      "emptyMeeting": "Bereit, dieses Meeting aufzuarbeiten",
+      "emptyNote": "Bereit, diese Notiz aufzuarbeiten",
+      "setupTitle": "Claude verbinden, um zu chatten",
+      "setupBody": "Aktiviere den KI-Agenten in den Einstellungen, um mit deinen Notizen zu chatten.",
+      "suggest": {
+        "summarise": "Zusammenfassen",
+        "actionItems": "Aufgaben",
+        "followUps": "Follow-ups",
+        "summariseNote": "Diese Notiz zusammenfassen",
+        "extractTasks": "Aufgaben extrahieren",
+        "keyIdeas": "Kernideen"
+      }
+    },
     "actions": {
       "manage": "Aktionen verwalten...",
       "manageTitle": "Benutzerdefinierte Aktionen",

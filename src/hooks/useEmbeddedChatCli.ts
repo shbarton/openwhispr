@@ -22,6 +22,8 @@ interface UseEmbeddedChatCliOptions {
   noteSlug?: string;
   /** Actual ISO date of the meeting (note.created_at). */
   noteCreatedAt?: string;
+  /** Meeting notes get meeting-flavoured prompt wording; other notes don't. */
+  isMeeting?: boolean;
 }
 
 export interface CliSideChannel {
@@ -66,7 +68,8 @@ const SYSTEM_PROMPT_TEMPLATE = (
   title: string,
   date: string,
   vaultPath: string,
-  slug: string
+  slug: string,
+  isMeeting: boolean
 ) => {
   const hasVault = vaultPath && vaultPath.trim().length > 0;
   const vaultSection = hasVault
@@ -84,16 +87,26 @@ When creating tasks, use the Chiron task schema:
 to the transcript file (the user will give you a path), but you can't
 create or look up tasks in a vault. Focus on chat-style answers.`;
 
-  return `You are a meeting assistant in OpenWhispr. The user just finished recording a meeting.
+  const intro = isMeeting
+    ? `You are a meeting assistant in OpenWhispr. The user just finished recording a meeting.
 
-Meeting metadata:
+Meeting metadata:`
+    : `You are a note assistant in OpenWhispr. The user is working on one of their notes.
+
+Note metadata:`;
+
+  return `${intro}
 - Title: ${title}
 - Date: ${date}
 
 ${vaultSection}
 
-The meeting transcript lives on disk as a plain-text file (one segment per
-line, formatted like "[HH:MM] speaker: text"). Use the Read tool with the
+The ${isMeeting ? "meeting transcript" : "note content"} lives on disk as a plain-text file${
+    isMeeting
+      ? ` (one segment per
+line, formatted like "[HH:MM] speaker: text")`
+      : ""
+  }. Use the Read tool with the
 path the user gives you to access it.
 
 RESPONSE RULES:
@@ -166,12 +179,13 @@ export function useEmbeddedChatCli(
   const systemPrompt = useMemo(
     () =>
       SYSTEM_PROMPT_TEMPLATE(
-        opts.noteTitle || "Untitled meeting",
+        opts.noteTitle || (opts.isMeeting !== false ? "Untitled meeting" : "Untitled note"),
         opts.noteCreatedAt || "",
         vaultPath,
-        opts.noteSlug || "meeting"
+        opts.noteSlug || "meeting",
+        opts.isMeeting !== false
       ),
-    [opts.noteTitle, opts.noteCreatedAt, vaultPath, opts.noteSlug]
+    [opts.noteTitle, opts.noteCreatedAt, vaultPath, opts.noteSlug, opts.isMeeting]
   );
 
   const streamOpts = useMemo(

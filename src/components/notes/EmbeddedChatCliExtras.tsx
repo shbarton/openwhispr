@@ -64,6 +64,8 @@ interface UseCliExtrasArgs {
   sendMessage: (text: string) => void;
   /** Suggestion-chip prompts shown when the chat is empty. */
   suggestions?: Array<{ label: string; prompt: string }>;
+  /** Empty-state headline; defaults to the meeting wording. */
+  emptyStateText?: string;
 }
 
 const DEFAULT_SUGGESTIONS = [
@@ -331,7 +333,7 @@ export function useCliExtras(args: UseCliExtrasArgs): {
   const emptyState: ReactNode = (
     <div className="flex flex-col items-center justify-center h-full px-6 text-center">
       <p className="text-xs text-foreground/70 mb-3">
-        Ready to dig into this meeting
+        {args.emptyStateText ?? "Ready to dig into this meeting"}
       </p>
       {canStart ? (
         <div className="flex flex-wrap gap-1.5 justify-center max-w-xs">

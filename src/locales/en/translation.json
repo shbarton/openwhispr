@@ -2061,6 +2061,20 @@
       "showInFileManager": "Show in {{manager}}",
       "openInCalyx": "Open in Calyx"
     },
+    "chat": {
+      "emptyMeeting": "Ready to dig into this meeting",
+      "emptyNote": "Ready to dig into this note",
+      "setupTitle": "Connect Claude to chat",
+      "setupBody": "Enable the AI agent in Settings to chat with your notes.",
+      "suggest": {
+        "summarise": "Summarise",
+        "actionItems": "Action items",
+        "followUps": "Follow-ups",
+        "summariseNote": "Summarise this note",
+        "extractTasks": "Extract tasks",
+        "keyIdeas": "Key ideas"
+      }
+    },
     "actions": {
       "done": "Done",
       "manage": "Manage Actions...",

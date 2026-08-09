@@ -1919,6 +1919,20 @@
       "showInFileManager": "Mostrar en {{manager}}",
       "openInCalyx": "Abrir en Calyx"
     },
+    "chat": {
+      "emptyMeeting": "Listo para analizar esta reunión",
+      "emptyNote": "Listo para analizar esta nota",
+      "setupTitle": "Conecta Claude para chatear",
+      "setupBody": "Activa el agente de IA en Ajustes para chatear con tus notas.",
+      "suggest": {
+        "summarise": "Resumir",
+        "actionItems": "Acciones",
+        "followUps": "Seguimientos",
+        "summariseNote": "Resumir esta nota",
+        "extractTasks": "Extraer tareas",
+        "keyIdeas": "Ideas clave"
+      }
+    },
     "actions": {
       "manage": "Gestionar acciones...",
       "manageTitle": "Acciones personalizadas",

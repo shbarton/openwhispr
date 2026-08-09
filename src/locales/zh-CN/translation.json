@@ -1866,6 +1866,20 @@
       "showInFileManager": "在{{manager}}中显示",
       "openInCalyx": "在 Calyx 中打开"
     },
+    "chat": {
+      "emptyMeeting": "准备好深入了解这场会议",
+      "emptyNote": "准备好深入了解这篇笔记",
+      "setupTitle": "连接 Claude 开始聊天",
+      "setupBody": "在设置中启用 AI 代理即可与笔记聊天。",
+      "suggest": {
+        "summarise": "总结",
+        "actionItems": "行动项",
+        "followUps": "跟进事项",
+        "summariseNote": "总结这篇笔记",
+        "extractTasks": "提取任务",
+        "keyIdeas": "关键要点"
+      }
+    },
     "actions": {
       "manage": "管理操作...",
       "manageTitle": "自定义操作",
