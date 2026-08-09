@@ -1777,6 +1777,8 @@
       "record": "Gravar",
       "processing": "Processando...",
       "export": "Exportar",
+      "moreActions": "Mais ações",
+      "fileUnavailable": "Não foi possível encontrar o arquivo desta nota",
       "asMarkdown": "Como Markdown",
       "asPlainText": "Como texto simples",
       "asTranscriptText": "Como texto simples (.txt)",
@@ -1866,7 +1868,8 @@
       "searchFolders": "Pesquisar pastas...",
       "noResults": "Nenhuma pasta encontrada",
       "newFolder": "Nova pasta",
-      "showInFileManager": "Mostrar no {{manager}}"
+      "showInFileManager": "Mostrar no {{manager}}",
+      "openInCalyx": "Abrir no Calyx"
     },
     "actions": {
       "manage": "Gerenciar ações...",

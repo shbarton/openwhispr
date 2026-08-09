@@ -8,6 +8,7 @@ import {
   Plus,
   Search,
   ExternalLink,
+  Pencil,
 } from "lucide-react";
 import { Button } from "../ui/button";
 import {
@@ -172,6 +173,19 @@ export default function NoteListItem({
                         className="text-muted-foreground/80 dark:text-muted-foreground/60"
                       />
                       {t("notes.context.showInFileManager", { manager: fileManagerName })}
+                    </DropdownMenuItem>
+                    <DropdownMenuItem
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        window.electronAPI?.openNoteInCalyx?.(note.id);
+                      }}
+                      className="text-xs gap-2 rounded-lg px-2.5 py-1.5 cursor-pointer focus:bg-foreground/5"
+                    >
+                      <Pencil
+                        size={12}
+                        className="text-muted-foreground/80 dark:text-muted-foreground/60"
+                      />
+                      {t("notes.context.openInCalyx")}
                     </DropdownMenuItem>
                     <DropdownMenuSeparator />
                   </>

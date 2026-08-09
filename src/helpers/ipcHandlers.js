@@ -7995,6 +7995,51 @@ class IPCHandlers {
       }
     });
 
+    ipcMain.handle("get-note-file-info", async (_event, noteId) => {
+      try {
+        const markdownMirror = require("./markdownMirror");
+        const filePath = markdownMirror.getNotePath(noteId);
+        if (!filePath) return { success: false };
+        const basePath = markdownMirror.getBasePath();
+        let relativePath = path.basename(filePath);
+        if (basePath) {
+          const rel = path.relative(basePath, filePath);
+          // Custom folder dirs can live outside the base path; a ".."-relative
+          // path is noise, so fall back to the bare filename there.
+          if (rel && !rel.startsWith("..")) relativePath = rel;
+        }
+        return { success: true, path: filePath, relativePath };
+      } catch (error) {
+        debugLogger.error(
+          "Failed to get note file info",
+          { noteId, error: error.message },
+          "note-files"
+        );
+        return { success: false };
+      }
+    });
+
+    ipcMain.handle("open-note-in-calyx", async (_event, noteId) => {
+      try {
+        const markdownMirror = require("./markdownMirror");
+        const filePath = markdownMirror.getNotePath(noteId);
+        if (!filePath) return { success: false };
+        // Calyx is the registered custom editor for .md in VS Code/Cursor, so a
+        // vscode://file/<abs-path> link is enough — the OS launches the editor
+        // if needed. Encode per segment: folder names may contain spaces.
+        const encoded = filePath.split(path.sep).map(encodeURIComponent).join("/");
+        await shell.openExternal(`vscode://file/${encoded}`);
+        return { success: true };
+      } catch (error) {
+        debugLogger.error(
+          "Failed to open note in Calyx",
+          { noteId, error: error.message },
+          "note-files"
+        );
+        return { success: false };
+      }
+    });
+
     ipcMain.handle("show-folder-in-explorer", async (_event, folderName) => {
       try {
         const markdownMirror = require("./markdownMirror");

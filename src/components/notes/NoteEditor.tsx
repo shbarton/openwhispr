@@ -14,6 +14,7 @@ import {
   Plus,
   Check,
   Pencil,
+  MoreHorizontal,
 } from "lucide-react";
 import { RichTextEditor } from "../ui/RichTextEditor";
 import type { Editor } from "@tiptap/react";
@@ -186,6 +187,36 @@ export default function NoteEditor({
   const recordShortcutLabel = meetingKey
     ? formatHotkeySymbols(meetingKey)
     : undefined;
+  const noteFilesEnabled = useSettingsStore((s) => s.noteFilesEnabled);
+  const [noteFileRelativePath, setNoteFileRelativePath] = useState<string | null>(null);
+  const fileManagerName = navigator.platform.startsWith("Mac")
+    ? "Finder"
+    : navigator.platform.startsWith("Win")
+      ? "Explorer"
+      : "Files";
+  // Fetched on menu open, not on mount — the file path can change underneath us
+  // (title rename moves the file; meeting notes only get one after recording).
+  const handleFileMenuOpenChange = useCallback(
+    (open: boolean) => {
+      if (!open) return;
+      window.electronAPI
+        ?.getNoteFileInfo?.(note.id)
+        .then((info) => setNoteFileRelativePath(info?.success ? (info.relativePath ?? null) : null))
+        .catch(() => setNoteFileRelativePath(null));
+    },
+    [note.id]
+  );
+  const notifyFileUnavailable = useCallback(() => {
+    toast({ description: t("notes.editor.fileUnavailable"), variant: "destructive" });
+  }, [toast, t]);
+  const handleShowNoteFile = useCallback(async () => {
+    const result = await window.electronAPI?.showNoteFile?.(note.id);
+    if (!result?.success) notifyFileUnavailable();
+  }, [note.id, notifyFileUnavailable]);
+  const handleOpenInCalyx = useCallback(async () => {
+    const result = await window.electronAPI?.openNoteInCalyx?.(note.id);
+    if (!result?.success) notifyFileUnavailable();
+  }, [note.id, notifyFileUnavailable]);
   const titleRef = useRef<HTMLDivElement>(null);
   const prevNoteIdRef = useRef<number>(note.id);
   const autoShowDoneRef = useRef(false);
@@ -879,6 +910,39 @@ export default function NoteEditor({
                         </DropdownMenuItem>
                       </>
                     )}
+                  </DropdownMenuContent>
+                </DropdownMenu>
+              )}
+              {noteFilesEnabled && (
+                <DropdownMenu onOpenChange={handleFileMenuOpenChange}>
+                  <DropdownMenuTrigger asChild>
+                    <button
+                      className="shrink-0 h-6 w-6 flex items-center justify-center rounded-md bg-foreground/4 dark:bg-white/5 text-foreground/50 dark:text-foreground/40 hover:text-foreground/70 hover:bg-foreground/8 dark:hover:text-foreground/60 dark:hover:bg-white/8 transition-colors duration-150"
+                      aria-label={t("notes.editor.moreActions")}
+                    >
+                      <MoreHorizontal size={11} />
+                    </button>
+                  </DropdownMenuTrigger>
+                  <DropdownMenuContent align="end" sideOffset={4} className="max-w-64">
+                    {noteFileRelativePath && (
+                      <>
+                        <div
+                          className="px-2 py-1 text-[10px] text-foreground/35 truncate select-text"
+                          title={noteFileRelativePath}
+                        >
+                          {noteFileRelativePath}
+                        </div>
+                        <DropdownMenuSeparator />
+                      </>
+                    )}
+                    <DropdownMenuItem onClick={handleShowNoteFile} className="text-xs gap-2">
+                      <FolderOpen size={13} className="text-foreground/40" />
+                      {t("notes.context.showInFileManager", { manager: fileManagerName })}
+                    </DropdownMenuItem>
+                    <DropdownMenuItem onClick={handleOpenInCalyx} className="text-xs gap-2">
+                      <Pencil size={13} className="text-foreground/40" />
+                      {t("notes.context.openInCalyx")}
+                    </DropdownMenuItem>
                   </DropdownMenuContent>
                 </DropdownMenu>
               )}

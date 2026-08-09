@@ -1952,6 +1952,8 @@
       "diarizationFailed": "Speaker detection failed — transcript saved without speakers",
       "processing": "Processing...",
       "export": "Export",
+      "moreActions": "More actions",
+      "fileUnavailable": "Couldn't find this note's file",
       "asMarkdown": "As Markdown",
       "asPlainText": "As Plain Text",
       "asTranscriptText": "As Plain Text (.txt)",
@@ -2056,7 +2058,8 @@
       "searchFolders": "Search folders...",
       "noResults": "No folders found",
       "newFolder": "New folder",
-      "showInFileManager": "Show in {{manager}}"
+      "showInFileManager": "Show in {{manager}}",
+      "openInCalyx": "Open in Calyx"
     },
     "actions": {
       "done": "Done",

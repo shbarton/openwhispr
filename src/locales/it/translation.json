@@ -1777,6 +1777,8 @@
       "record": "Registra",
       "processing": "Elaborazione...",
       "export": "Esporta",
+      "moreActions": "Altre azioni",
+      "fileUnavailable": "Impossibile trovare il file di questa nota",
       "asMarkdown": "Come Markdown",
       "asPlainText": "Come testo semplice",
       "asTranscriptText": "Come testo semplice (.txt)",
@@ -1866,7 +1868,8 @@
       "searchFolders": "Cerca cartelle...",
       "noResults": "Nessuna cartella trovata",
       "newFolder": "Nuova cartella",
-      "showInFileManager": "Mostra in {{manager}}"
+      "showInFileManager": "Mostra in {{manager}}",
+      "openInCalyx": "Apri in Calyx"
     },
     "actions": {
       "manage": "Gestisci azioni...",

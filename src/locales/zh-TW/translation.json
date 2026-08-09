@@ -1772,6 +1772,8 @@
       "record": "錄音",
       "processing": "處理中...",
       "export": "匯出",
+      "moreActions": "更多操作",
+      "fileUnavailable": "找不到此筆記的檔案",
       "asMarkdown": "匯出為 Markdown",
       "asPlainText": "匯出為純文字",
       "asTranscriptText": "匯出為純文字 (.txt)",
@@ -1861,7 +1863,8 @@
       "searchFolders": "搜尋資料夾...",
       "noResults": "找不到資料夾",
       "newFolder": "新增資料夾",
-      "showInFileManager": "在{{manager}}中顯示"
+      "showInFileManager": "在{{manager}}中顯示",
+      "openInCalyx": "在 Calyx 中開啟"
     },
     "actions": {
       "manage": "管理動作...",

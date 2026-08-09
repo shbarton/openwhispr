@@ -124,6 +124,8 @@ contextBridge.exposeInMainWorld("electronAPI", {
   noteFilesPickFolder: () => ipcRenderer.invoke("note-files-pick-folder"),
   noteFilesPickTemplate: () => ipcRenderer.invoke("note-files-pick-template"),
   showNoteFile: (noteId) => ipcRenderer.invoke("show-note-file", noteId),
+  getNoteFileInfo: (noteId) => ipcRenderer.invoke("get-note-file-info", noteId),
+  openNoteInCalyx: (noteId) => ipcRenderer.invoke("open-note-in-calyx", noteId),
   showFolderInExplorer: (folderName) => ipcRenderer.invoke("show-folder-in-explorer", folderName),
 
   // Vault metadata (Calyx integration for tags/projects autocomplete)

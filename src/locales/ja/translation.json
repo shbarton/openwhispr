@@ -1689,6 +1689,8 @@
       "stop": "停止",
       "processing": "処理中...",
       "export": "エクスポート",
+      "moreActions": "その他の操作",
+      "fileUnavailable": "このノートのファイルが見つかりませんでした",
       "asMarkdown": "Markdown 形式",
       "asPlainText": "プレーンテキスト形式",
       "asTranscriptText": "プレーンテキスト (.txt)",
@@ -1715,7 +1717,8 @@
       "searchFolders": "フォルダを検索...",
       "noResults": "フォルダが見つかりません",
       "newFolder": "新しいフォルダ",
-      "showInFileManager": "{{manager}}で表示"
+      "showInFileManager": "{{manager}}で表示",
+      "openInCalyx": "Calyxで開く"
     },
     "actions": {
       "manage": "アクションを管理...",

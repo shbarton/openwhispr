@@ -1825,6 +1825,8 @@
       "record": "Grabar",
       "processing": "Procesando...",
       "export": "Exportar",
+      "moreActions": "Más acciones",
+      "fileUnavailable": "No se encontró el archivo de esta nota",
       "asMarkdown": "Como Markdown",
       "asPlainText": "Como texto plano",
       "asTranscriptText": "Como texto plano (.txt)",
@@ -1914,7 +1916,8 @@
       "searchFolders": "Buscar carpetas...",
       "noResults": "No se encontraron carpetas",
       "newFolder": "Nueva carpeta",
-      "showInFileManager": "Mostrar en {{manager}}"
+      "showInFileManager": "Mostrar en {{manager}}",
+      "openInCalyx": "Abrir en Calyx"
     },
     "actions": {
       "manage": "Gestionar acciones...",

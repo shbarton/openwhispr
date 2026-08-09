@@ -632,6 +632,10 @@ declare global {
       noteFilesPickFolder?: () => Promise<{ canceled: boolean; path?: string }>;
       noteFilesPickTemplate?: () => Promise<{ canceled: boolean; path?: string }>;
       showNoteFile?: (noteId: number) => Promise<{ success: boolean }>;
+      getNoteFileInfo?: (
+        noteId: number
+      ) => Promise<{ success: boolean; path?: string; relativePath?: string }>;
+      openNoteInCalyx?: (noteId: number) => Promise<{ success: boolean }>;
       showFolderInExplorer?: (folderName: string) => Promise<{ success: boolean }>;
 
       // Vault metadata (Calyx integration)

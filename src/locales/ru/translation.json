@@ -1777,6 +1777,8 @@
       "record": "Записать",
       "processing": "Обработка...",
       "export": "Экспорт",
+      "moreActions": "Дополнительные действия",
+      "fileUnavailable": "Не удалось найти файл этой заметки",
       "asMarkdown": "Как Markdown",
       "asPlainText": "Как обычный текст",
       "asTranscriptText": "Как текстовый файл (.txt)",
@@ -1866,7 +1868,8 @@
       "searchFolders": "Поиск папок...",
       "noResults": "Папки не найдены",
       "newFolder": "Новая папка",
-      "showInFileManager": "Показать в {{manager}}"
+      "showInFileManager": "Показать в {{manager}}",
+      "openInCalyx": "Открыть в Calyx"
     },
     "actions": {
       "manage": "Управление действиями...",

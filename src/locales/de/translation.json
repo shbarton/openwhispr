@@ -1777,6 +1777,8 @@
       "record": "Aufnehmen",
       "processing": "Verarbeitung...",
       "export": "Exportieren",
+      "moreActions": "Weitere Aktionen",
+      "fileUnavailable": "Datei dieser Notiz nicht gefunden",
       "asMarkdown": "Als Markdown",
       "asPlainText": "Als Klartext",
       "asTranscriptText": "Als Textdatei (.txt)",
@@ -1866,7 +1868,8 @@
       "searchFolders": "Ordner suchen...",
       "noResults": "Keine Ordner gefunden",
       "newFolder": "Neuer Ordner",
-      "showInFileManager": "Im {{manager}} anzeigen"
+      "showInFileManager": "Im {{manager}} anzeigen",
+      "openInCalyx": "In Calyx öffnen"
     },
     "actions": {
       "manage": "Aktionen verwalten...",

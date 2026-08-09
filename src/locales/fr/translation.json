@@ -1903,6 +1903,8 @@
       "record": "Enregistrer",
       "processing": "Traitement...",
       "export": "Exporter",
+      "moreActions": "Plus d'actions",
+      "fileUnavailable": "Impossible de trouver le fichier de cette note",
       "asMarkdown": "En Markdown",
       "asPlainText": "En texte brut",
       "asTranscriptText": "En texte brut (.txt)",
@@ -2008,7 +2010,8 @@
       "searchFolders": "Rechercher des dossiers...",
       "noResults": "Aucun dossier trouvé",
       "newFolder": "Nouveau dossier",
-      "showInFileManager": "Afficher dans {{manager}}"
+      "showInFileManager": "Afficher dans {{manager}}",
+      "openInCalyx": "Ouvrir dans Calyx"
     },
     "actions": {
       "done": "Terminé",
