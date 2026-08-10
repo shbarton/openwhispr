@@ -1745,10 +1745,18 @@
     },
     "upcomingMeetings": "Réunions à venir",
     "recentTranscripts": "Transcriptions récentes",
+    "recentMeetings": "Réunions récentes",
     "viewAll": "Voir tout",
     "noTranscripts": "Aucune transcription pour l'instant",
     "noUpcomingMeetings": "Aucune réunion à venir",
-    "connectCalendar": "Connecter un calendrier"
+    "connectCalendar": "Connecter un calendrier",
+    "noRecentMeetings": "Aucune réunion enregistrée pour l'instant",
+    "untitledMeeting": "Réunion sans titre",
+    "startMeeting": "Démarrer une réunion",
+    "connectCalendarPrompt": "Connectez un calendrier pour voir ce qui arrive",
+    "filterByProject": "Afficher uniquement ce projet",
+    "clearProjectFilter": "Afficher toutes les réunions récentes",
+    "noMeetingsInProject": "Aucune réunion dans {{project}} pour l'instant"
   },
   "chat": {
     "newChat": "Nouveau chat",

@@ -86,6 +86,8 @@ contextBridge.exposeInMainWorld("electronAPI", {
   getNote: (id) => ipcRenderer.invoke("db-get-note", id),
   getNotes: (noteType, limit, folderId) =>
     ipcRenderer.invoke("db-get-notes", noteType, limit, folderId),
+  getRecentMeetings: (limit, project) =>
+    ipcRenderer.invoke("db-get-recent-meetings", limit, project),
   updateNote: (id, updates) => ipcRenderer.invoke("db-update-note", id, updates),
   deleteNote: (id) => ipcRenderer.invoke("db-delete-note", id),
   exportNote: (noteId, format) => ipcRenderer.invoke("export-note", noteId, format),
@@ -952,6 +954,7 @@ contextBridge.exposeInMainWorld("electronAPI", {
   meetingNotificationRespond: (detectionId, action) =>
     ipcRenderer.invoke("meeting-notification-respond", detectionId, action),
   joinCalendarMeeting: (eventId) => ipcRenderer.invoke("join-calendar-meeting", eventId),
+  startManualMeeting: () => ipcRenderer.invoke("start-manual-meeting"),
   onNavigateToMeetingNote: registerListener(
     "navigate-to-meeting-note",
     (callback) => (_event, data) => callback(data)

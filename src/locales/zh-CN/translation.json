@@ -2043,10 +2043,18 @@
     },
     "upcomingMeetings": "即将到来的会议",
     "recentTranscripts": "最近的转写",
+    "recentMeetings": "最近的会议",
     "viewAll": "查看全部",
     "noTranscripts": "暂无转写内容",
     "noUpcomingMeetings": "没有即将到来的会议",
-    "connectCalendar": "连接日历"
+    "connectCalendar": "连接日历",
+    "noRecentMeetings": "暂无会议录音",
+    "untitledMeeting": "无标题会议",
+    "startMeeting": "开始会议",
+    "connectCalendarPrompt": "连接日历即可查看接下来的安排",
+    "filterByProject": "仅显示该项目",
+    "clearProjectFilter": "显示全部最近的会议",
+    "noMeetingsInProject": "{{project}} 中暂无会议"
   },
   "chat": {
     "newChat": "新对话",

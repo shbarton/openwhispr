@@ -2043,10 +2043,18 @@
     },
     "upcomingMeetings": "即將到來的會議",
     "recentTranscripts": "最近的逐字稿",
+    "recentMeetings": "最近的會議",
     "viewAll": "查看全部",
     "noTranscripts": "尚無逐字稿",
     "noUpcomingMeetings": "沒有即將到來的會議",
-    "connectCalendar": "連結日曆"
+    "connectCalendar": "連結日曆",
+    "noRecentMeetings": "尚無會議錄音",
+    "untitledMeeting": "未命名會議",
+    "startMeeting": "開始會議",
+    "connectCalendarPrompt": "連結日曆即可查看接下來的安排",
+    "filterByProject": "僅顯示此專案",
+    "clearProjectFilter": "顯示全部最近的會議",
+    "noMeetingsInProject": "{{project}} 中尚無會議"
   },
   "chat": {
     "newChat": "新對話",

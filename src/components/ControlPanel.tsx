@@ -859,6 +859,11 @@ export default function ControlPanel() {
                   setSettingsSection(section);
                   setShowSettings(true);
                 }}
+                onOpenNote={(note) => {
+                  if (note.folder_id) setActiveFolderId(note.folder_id);
+                  setActiveNoteId(note.id);
+                  setActiveView("personal-notes");
+                }}
               />
             )}
             {activeView === "dictation" && (

@@ -912,6 +912,43 @@ class DatabaseManager {
     }
   }
 
+  /**
+   * Lightweight meeting rows for the dashboard. Deliberately not `SELECT *`:
+   * a long meeting's stored transcript is megabytes, and the dashboard only
+   * needs a short preview of it.
+   */
+  getRecentMeetings(limit = 5, project = null) {
+    try {
+      if (!this.db) {
+        throw new Error("Database not initialized");
+      }
+      const conditions = ["deleted_at IS NULL", "note_type = 'meeting'"];
+      const params = [];
+      if (project) {
+        conditions.push("project = ?");
+        params.push(project);
+      }
+      params.push(limit);
+      return this.db
+        .prepare(
+          `SELECT id, title, project, tags, participants, folder_id,
+                  audio_duration_seconds, created_at, updated_at,
+                  substr(
+                    COALESCE(NULLIF(enhanced_content, ''), NULLIF(content, ''), transcript, ''),
+                    1, 500
+                  ) AS preview
+           FROM notes
+           WHERE ${conditions.join(" AND ")}
+           ORDER BY created_at DESC
+           LIMIT ?`
+        )
+        .all(...params);
+    } catch (error) {
+      debugLogger.error("Error getting recent meetings", { error: error.message }, "notes");
+      throw error;
+    }
+  }
+
   updateNote(id, updates) {
     try {
       if (!this.db) throw new Error("Database not initialized");

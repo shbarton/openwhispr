@@ -2048,10 +2048,18 @@
     },
     "upcomingMeetings": "予定の会議",
     "recentTranscripts": "最近の文字起こし",
+    "recentMeetings": "最近の会議",
     "viewAll": "すべて表示",
     "noTranscripts": "まだ文字起こしはありません",
     "noUpcomingMeetings": "予定の会議はありません",
-    "connectCalendar": "カレンダーを接続"
+    "connectCalendar": "カレンダーを接続",
+    "noRecentMeetings": "録音された会議はまだありません",
+    "untitledMeeting": "無題の会議",
+    "startMeeting": "会議を開始",
+    "connectCalendarPrompt": "カレンダーを接続すると予定が表示されます",
+    "filterByProject": "このプロジェクトのみ表示",
+    "clearProjectFilter": "最近の会議をすべて表示",
+    "noMeetingsInProject": "{{project}} の会議はまだありません"
   },
   "chat": {
     "newChat": "新しいチャット",

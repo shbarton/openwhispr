@@ -2048,10 +2048,18 @@
     },
     "upcomingMeetings": "Bevorstehende Meetings",
     "recentTranscripts": "Aktuelle Transkripte",
+    "recentMeetings": "Aktuelle Meetings",
     "viewAll": "Alle anzeigen",
     "noTranscripts": "Noch keine Transkripte",
     "noUpcomingMeetings": "Keine bevorstehenden Meetings",
-    "connectCalendar": "Kalender verbinden"
+    "connectCalendar": "Kalender verbinden",
+    "noRecentMeetings": "Noch keine Meetings aufgezeichnet",
+    "untitledMeeting": "Unbenanntes Meeting",
+    "startMeeting": "Meeting starten",
+    "connectCalendarPrompt": "Kalender verbinden, um Anstehendes zu sehen",
+    "filterByProject": "Nur dieses Projekt anzeigen",
+    "clearProjectFilter": "Alle aktuellen Meetings anzeigen",
+    "noMeetingsInProject": "Noch keine Meetings in {{project}}"
   },
   "chat": {
     "newChat": "Neuer Chat",

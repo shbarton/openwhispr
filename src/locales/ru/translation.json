@@ -2050,10 +2050,18 @@
     },
     "upcomingMeetings": "Предстоящие встречи",
     "recentTranscripts": "Последние транскрипты",
+    "recentMeetings": "Последние встречи",
     "viewAll": "Показать все",
     "noTranscripts": "Транскриптов пока нет",
     "noUpcomingMeetings": "Предстоящих встреч нет",
-    "connectCalendar": "Подключить календарь"
+    "connectCalendar": "Подключить календарь",
+    "noRecentMeetings": "Записанных встреч пока нет",
+    "untitledMeeting": "Встреча без названия",
+    "startMeeting": "Начать встречу",
+    "connectCalendarPrompt": "Подключите календарь, чтобы видеть предстоящее",
+    "filterByProject": "Показать только этот проект",
+    "clearProjectFilter": "Показать все последние встречи",
+    "noMeetingsInProject": "Во «{{project}}» пока нет встреч"
   },
   "chat": {
     "newChat": "Новый чат",

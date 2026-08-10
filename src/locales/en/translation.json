@@ -1793,10 +1793,18 @@
     },
     "upcomingMeetings": "Upcoming meetings",
     "recentTranscripts": "Recent transcripts",
+    "recentMeetings": "Recent meetings",
     "viewAll": "View all",
     "noTranscripts": "No transcripts yet",
     "noUpcomingMeetings": "No upcoming meetings",
-    "connectCalendar": "Connect a calendar"
+    "connectCalendar": "Connect a calendar",
+    "noRecentMeetings": "No meetings recorded yet",
+    "untitledMeeting": "Untitled meeting",
+    "startMeeting": "Start a meeting",
+    "connectCalendarPrompt": "Connect a calendar to see what's coming up",
+    "filterByProject": "Show only this project",
+    "clearProjectFilter": "Show all recent meetings",
+    "noMeetingsInProject": "No meetings in {{project}} yet"
   },
   "chat": {
     "newChat": "New chat",

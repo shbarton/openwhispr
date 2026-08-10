@@ -135,6 +135,24 @@ export interface NoteItem {
   tags: string | null;
 }
 
+/**
+ * Trimmed meeting row for the dashboard — see `getRecentMeetings` in
+ * database.js. `preview` is the first 500 chars of the summary, the note body,
+ * or (failing both) the raw stored transcript.
+ */
+export interface RecentMeetingItem {
+  id: number;
+  title: string;
+  project: string | null;
+  tags: string | null;
+  participants: string | null;
+  folder_id: number | null;
+  audio_duration_seconds: number | null;
+  created_at: string;
+  updated_at: string;
+  preview: string | null;
+}
+
 export interface FolderItem {
   id: number;
   name: string;
@@ -553,6 +571,7 @@ declare global {
         limit?: number,
         folderId?: number | null
       ) => Promise<NoteItem[]>;
+      getRecentMeetings?: (limit?: number, project?: string | null) => Promise<RecentMeetingItem[]>;
       updateNote: (
         id: number,
         updates: {
@@ -1818,6 +1837,7 @@ declare global {
         action: string
       ) => Promise<{ success: boolean }>;
       joinCalendarMeeting?: (eventId: string) => Promise<{ success: boolean }>;
+      startManualMeeting?: () => Promise<{ success: boolean; error?: string }>;
       onNavigateToMeetingNote?: (
         callback: (data: {
           noteId: number;

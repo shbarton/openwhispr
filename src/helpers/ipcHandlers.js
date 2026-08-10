@@ -1002,6 +1002,10 @@ class IPCHandlers {
       return this.databaseManager.getNotes(noteType, limit, folderId);
     });
 
+    ipcMain.handle("db-get-recent-meetings", async (event, limit, project) => {
+      return this.databaseManager.getRecentMeetings(limit, project ?? null);
+    });
+
     ipcMain.handle("db-update-note", async (event, id, updates) => {
       const result = this.databaseManager.updateNote(id, updates);
       if (result?.success && result?.note) {
@@ -7869,6 +7873,15 @@ class IPCHandlers {
         } else {
           await this.meetingDetectionEngine.handleNotificationResponse(detectionId, action);
         }
+        return { success: true };
+      } catch (error) {
+        return { success: false, error: error.message };
+      }
+    });
+
+    ipcMain.handle("start-manual-meeting", async () => {
+      try {
+        await this.meetingDetectionEngine.startManualMeeting();
         return { success: true };
       } catch (error) {
         return { success: false, error: error.message };
